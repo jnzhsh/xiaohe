@@ -1,0 +1,1 @@
+1.2.1: AbsoluteDateSmoke、ScheduleSmoke、ScheduleApiSmoke、ClipboardSmoke 为日期保存/查询/API及Android输入法回归。只在独立测试库和AVD运行。desktop为本工作区模拟器的电脑剪贴板适配，手机使用原生剪贴板。源代码包不含签名私钥、数据库或API密钥。

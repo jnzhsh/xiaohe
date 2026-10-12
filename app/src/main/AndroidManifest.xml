@@ -1,0 +1,21 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app.xiaohe.assistant" android:versionCode="4" android:versionName="1.2.1">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+  <uses-feature android:name="android.hardware.microphone" android:required="false" />
+  <queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>
+  <application android:label="小禾" android:icon="@drawable/ic_xiaohe" android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="true" android:supportsRtl="true">
+    <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize">
+      <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+      <intent-filter><action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter>
+      <intent-filter><action android:name="android.intent.action.SEND_MULTIPLE" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter>
+    </activity>
+    <service android:name=".ArchiveJob" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="true" />
+    <receiver android:name=".ReminderReceiver" android:exported="false" />
+    <receiver android:name=".BootReceiver" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter></receiver>
+    <provider android:name=".AttachmentProvider" android:authorities="app.xiaohe.assistant.files" android:exported="false" android:grantUriPermissions="true" />
+  </application>
+</manifest>

@@ -1,0 +1,54 @@
+小禾 1.2.1 初始候选：交付与续接记录
+维护位置：本仓库 DELIVERY.txt；同版本 Release 保存制品与验证读回结果。
+
+目标与授权
+2026-10-12 用户要求上传 https://github.com/jnzhsh/xiaohe，并明确指定“以现有 1.2.1 作为初始版本”。
+范围：原样上传已交付的源码快照到 codex/initial-1.2.1；发布手机 APK、源码包及校验信息。
+不修改应用源码。新增的 .gitignore 与本文仅用于仓库包装和续接。
+
+工作区与基线
+候选目录：C:/Users/sino/Documents/Codex/xiaohe-feature-initial-1.2.1
+原始构建目录：C:/Users/sino/Documents/Codex/2026-10-09/xai/work/xiaohe-android
+预检时远端没有任何提交或分支；本次首提交采用用户指定的 1.2.1 源码包。
+dev 尚未建立，origin/dev SHA 不存在，共享 dev 路径尚未指定。
+本次不是基于 origin/dev 的功能任务，也不推进 dev 或 main。
+实际初始提交 SHA 与上传读回结果见同版本 GitHub Release。
+
+制品身份
+版本 1.2.1，versionCode 4；Android 8.0 及以上。
+APK SHA-256：fd19adb062d2a9499785530acccccaadb8bc84bd13b9ee07fe904ec5b8901143
+源码包 SHA-256：eba2ac031407fe3cd049bc179c619897550bc8a1e91e7d0c5d5f4e2ccddfc58e
+签名证书 SHA-256：69bd6c6677d19e60d68ceebbcb42a21bcb24ff07534c26871ce3f80e0aba93a3
+64 个源码包文件逐字节复制；原应用项目文件逐字节与源码包一致。
+未包含实际手机记录、API 密钥或签名私钥。
+
+功能与兼容性
+明确的相对日期首次保存时固定到原输入的绝对日期与时区，保留原话。
+本机日程查询按日历区间查询全量数据库，不依赖“明天”关键词或模型连接。
+“现在整理一下”处理旧记录中有原始日期依据的相对日期，并返回进度与结果。
+粘贴按钮通过原生输入连接结束输入法组合，再将剪贴板文字写入编辑器。
+沿用已有应用签名，可覆盖安装旧版。导入导出沿用 v2 备份格式并兼容旧版。
+需要回退 APK 时，先导出手机数据；Android 通常不允许直接降级安装，卸载会清除应用数据。
+
+验证证据与限制
+先前对本次 1.2.1 候选执行并通过的隔离原生用例：absolute-dates、schedule-query、schedule-api、clipboard、assistant-feel、organizer、organizer-ui。
+用例源码在 verification/；实际运行使用隔离的测试数据库和测试 AVD，没有覆盖体验设备的个人数据。
+本次上传另核对 APK/源码包 SHA-256、64 文件一致性、签名文件与凭据排除；不会把上传检查说成重新执行全部功能用例。
+实体手机的中文离线语音识别尚未验证；Windows 模拟器 Ctrl+V 的最后一轮前台条件未满足，不能当作通过。
+APK 的主程序未因上传而重新编译；发布制品与刚交付给用户的 APK 完全一致。
+
+语音现状与待审方案
+1.2.1 只有在 Android 12+、系统提供 on-device 服务、且 asrUrl 留空时，实时语音走本机识别。
+系统离线服务的存在不等于已具备中文模型。已有音频和视频声音仍通过独立转写接口处理；未连接时保留原件和未转写说明。
+待审方向：内置离线语音模型，让录音在手机内转成文字；主 AI 只接收需要处理的文字。
+转写后文字先进入输入框供用户补充或更正；不应在本地识别失败时自动上传音频。
+系统支持时可使用明确的 on-device API；需要独立适配时可评估 sherpa-onnx 中文模型。
+代价：增加模型下载/存储和设备算力占用，实际包大小、速度和中文准确率须按最终模型与手机验证。
+参考：https://developer.android.com/reference/android/speech/SpeechRecognizer
+参考：https://k2-fsa.github.io/sherpa/onnx/android/index.html
+该离线引擎方案尚未实现，也不属于 1.2.1 APK 的已交付能力。
+
+下一步
+GitHub 首候选上传与制品读回后，将链接交付用户。
+后续改源码前，由用户确认 dev 的初始提交及共享路径；按全局研发纪律从确认的 origin/dev 开独立 feature。
+离线语音功能实施前，复核语音处理边界与模型方案，再在隔离设备上验证断网中文转写及无音频上传。

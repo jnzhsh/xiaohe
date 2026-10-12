@@ -1,0 +1,22 @@
+# Local build output and machine configuration
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+
+# Phone records, credentials, signing material and release binaries
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.jks
+*.keystore
+*.secret
+*.pem
+*.key
+.env
+.env.*
+*.apk
+*.aab

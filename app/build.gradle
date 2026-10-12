@@ -1,0 +1,20 @@
+plugins { id 'com.android.application' }
+def generatedManifest = layout.buildDirectory.file('generated/gradle-manifest/AndroidManifest.xml')
+tasks.register('prepareGradleManifest') {
+  inputs.file('src/main/AndroidManifest.xml')
+  outputs.file(generatedManifest)
+  doLast {
+    def destination = generatedManifest.get().asFile
+    destination.parentFile.mkdirs()
+    destination.text = file('src/main/AndroidManifest.xml').getText('UTF-8').replace(' package="app.xiaohe.assistant"', '')
+  }
+}
+android {
+  namespace 'app.xiaohe.assistant'
+  compileSdk 35
+  defaultConfig { applicationId 'app.xiaohe.assistant'; minSdk 26; targetSdk 35; versionCode 4; versionName '1.2.1' }
+  compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
+  buildTypes { release { minifyEnabled false } }
+  sourceSets { main { manifest.srcFile generatedManifest.get().asFile } }
+}
+tasks.named('preBuild').configure { dependsOn('prepareGradleManifest') }
