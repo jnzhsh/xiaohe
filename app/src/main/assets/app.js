@@ -8,21 +8,71 @@ function initIcons(root=document){root.querySelectorAll('[data-icon]').forEach(e
 const pendingCalls=new Map();let counter=0;
 window.NativeBridge={
  resolve(id,value,error){const p=pendingCalls.get(id);if(!p)return;pendingCalls.delete(id);clearTimeout(p.timer);error?p.reject(new Error(error)):p.resolve(value);},
- event(name,value){if(name==='progress')progress(value.text,true);if(name==='error')toast(value.text);if(name==='shared'){if(value.text){$('#message-input').value=[$('#message-input').value,value.text].filter(Boolean).join('\n');saveDraft();}if(value.files)for(const f of value.files)state.pending.set(f.id,f);renderPending();changeView('chat');}if(name==='voiceText'){$('#message-input').value=[$('#message-input').value,value.text].filter(Boolean).join('\n');saveDraft();toast('听到了，想补充的话可以接着写。');}if(name==='voiceState'){state.recording=value.text!=='stopped';$('#voice').classList.toggle('recording',state.recording);$('#voice-label').textContent=state.recording?'结束':'语音';progress(state.recording?'我在听，完成后再点一下语音。':'记录与素材保存在这部手机。',state.recording);}}
+ event(name,value){
+  if(name==='progress')progress(value.text,true);
+  if(name==='error')toast(value.text);
+  if(name==='shared'){if(value.text){$('#message-input').value=[$('#message-input').value,value.text].filter(Boolean).join('\n');saveDraft();}if(value.files)for(const f of value.files)state.pending.set(f.id,f);renderPending();changeView('chat');}
+  if(name==='voiceState')setVoiceState(value.state||'stopped',value);
+  if(name==='voicePartial'&&value.sessionId===state.voiceSessionId&&state.voiceState==='listening')$('#voice-preview').textContent=value.text||'说完点“说好了”，我会先写成文字。';
+  if(name==='voiceResult')receiveVoice(value);
+ }
+
 };
 function call(method,args={}){return new Promise((resolve,reject)=>{if(!window.XiaoheAndroid){reject(new Error('请在小禾安卓 App 中使用。'));return;}const id='request_'+(++counter)+'_'+Date.now();const timer=setTimeout(()=>{pendingCalls.delete(id);reject(new Error('这次操作花的时间较长，可以稍后重试。'));},15*60*1000);pendingCalls.set(id,{resolve,reject,timer});try{window.XiaoheAndroid.invoke(method,JSON.stringify(args),id);}catch(error){window.NativeBridge.resolve(id,null,error.message);}});}
-const state={messages:[],sources:new Map(),sourceLoads:new Map(),memories:[],files:new Map(),pending:new Map(),draftRestored:false,settings:{},archiveReport:'',view:'chat',memoryStatus:'active',taskStatus:'active',category:'',busy:false,recording:false,detail:null,detailMode:'closed',detailSequence:0,detailConflict:null,entities:[],conflicts:[],tasks:[],page:{rows:[],tags:[]},pageSequence:0,pageKey:'',historyRows:[],historyMemory:null,entityPage:{rows:[]},entitySequence:0,entityQuery:'',taskPage:{rows:[]},taskSequence:0};
+const state={messages:[],sources:new Map(),sourceLoads:new Map(),memories:[],files:new Map(),pending:new Map(),draftRestored:false,settings:{},archiveReport:'',view:'chat',memoryStatus:'active',taskStatus:'active',category:'',busy:false,recording:false,voiceState:'stopped',voiceSessionId:'',cancelledVoiceSessions:new Set(),draftAnchor:null,detail:null,detailMode:'closed',detailSequence:0,detailConflict:null,entities:[],conflicts:[],tasks:[],page:{rows:[],tags:[]},pageSequence:0,pageKey:'',historyRows:[],historyMemory:null,entityPage:{rows:[]},entitySequence:0,entityQuery:'',taskPage:{rows:[]},taskSequence:0};
 let toastTimer,ocrWorker,loadPromise;
 function toast(text){const element=$('#toast'),dialogs=$$('dialog[open]');(dialogs[dialogs.length-1]||document.body).append(element);element.textContent=text;element.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>element.hidden=true,4200);}
 function progress(text,busy=false){$('#progress').textContent=text;$('#progress').classList.toggle('busy',busy);}
 function formatDate(value,options,zone){if(!value)return '';const d=new Date(value);if(Number.isNaN(d.getTime()))return '时间未定';try{return new Intl.DateTimeFormat('zh-CN',{...options,timeZone:zone||undefined}).format(d);}catch(_){return new Intl.DateTimeFormat('zh-CN',options).format(d);}}
 function time(value,zone){return formatDate(value,{month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false},zone);}
-function loadData(data){if(!data)return;state.messages=data.messages||[];state.memories=data.memories||[];state.files=new Map((data.files||[]).map(f=>[f.id,f]));state.settings=data.settings||{};state.archiveReport=data.archiveReport||'';state.entities=data.entities||[];state.conflicts=data.conflicts||[];state.tasks=data.tasks||state.memories;state.page=data.memoryPage||{rows:state.memories,tags:[]};state.memoryCount=data.memoryCount??state.memories.length;state.notifications=data.notifications;state.exactAlarms=data.exactAlarms;if(!state.draftRestored){state.draftRestored=true;try{for(const id of JSON.parse(localStorage.getItem('xiaohe-draft-files')||'[]'))if(state.files.has(id))state.pending.set(id,state.files.get(id));}catch(_){}renderPending();}renderAll();if(data.openMemoryId)showDetail(data.openMemoryId);}
+function loadData(data){if(!data)return;state.messages=data.messages||[];state.memories=data.memories||[];state.files=new Map((data.files||[]).map(f=>[f.id,f]));state.settings=data.settings||{};state.archiveReport=data.archiveReport||'';state.entities=data.entities||[];state.conflicts=data.conflicts||[];state.tasks=data.tasks||state.memories;state.page=data.memoryPage||{rows:state.memories,tags:[]};state.memoryCount=data.memoryCount??state.memories.length;state.notifications=data.notifications;state.exactAlarms=data.exactAlarms;if(!state.draftRestored){state.draftRestored=true;try{for(const id of JSON.parse(localStorage.getItem('xiaohe-draft-files')||'[]'))if(state.files.has(id))state.pending.set(id,state.files.get(id));}catch(_){}if(state.draftAnchor&&!state.files.has(state.draftAnchor.anchorFileId))state.draftAnchor=null;renderPending();saveDraft();}renderAll();if(data.openMemoryId)showDetail(data.openMemoryId);}
 async function refresh(){loadData(await call('bootstrap'));}
 function openSheet(id){const d=$('#'+id);if(!d.open)d.showModal();}
 function closeSheet(id){if(id==='detail-dialog'){state.detailMode='closed';++state.detailSequence;}$('#'+id).close();}
-function changeView(view){state.view=view;$$('.view').forEach(v=>v.classList.toggle('active',v.id===view+'-view'));$$('.bottom-nav button').forEach(b=>b.classList.toggle('selected',b.dataset.view===view));$('#composer-wrap').hidden=view!=='chat';if(view==='memory')renderMemories();if(view==='tasks')renderTasks();$('#main').scrollTop=view==='chat'?$('#main').scrollHeight:0;}
-function saveDraft(){try{localStorage.setItem('xiaohe-draft',$('#message-input').value);}catch(_){} }
+function changeView(view){if(view!=='chat'&&voiceActive())cancelVoice();state.view=view;$$('.view').forEach(v=>v.classList.toggle('active',v.id===view+'-view'));$$('.bottom-nav button').forEach(b=>b.classList.toggle('selected',b.dataset.view===view));$('#composer-wrap').hidden=view!=='chat';if(view==='memory')renderMemories();if(view==='tasks')renderTasks();$('#main').scrollTop=view==='chat'?$('#main').scrollHeight:0;}
+function saveDraft(){
+ const text=$('#message-input').value;
+ if(!text.trim()&&![...state.pending.values()].some(f=>f.localVoice))state.draftAnchor=null;
+ try{localStorage.setItem('xiaohe-draft',text);if(state.draftAnchor)localStorage.setItem('xiaohe-draft-anchor',JSON.stringify(state.draftAnchor));else localStorage.removeItem('xiaohe-draft-anchor');}catch(_){}
+ renderDraftOrigin();
+}
+function renderDraftOrigin(){
+ const anchor=state.draftAnchor;
+ $('#draft-origin').hidden=!anchor;$('#clear-draft').hidden=!anchor;
+ if(anchor)$('#draft-origin').textContent='这段里的时间，按 '+formatDate(anchor.capturedAt,{month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false},anchor.capturedZone)+' 说话时记着。';
+}
+function voiceActive(){return state.voiceState!=='stopped';}
+function updateComposerControls(){
+ const active=voiceActive();document.documentElement.classList.toggle('voice-active',active);$('#send').disabled=state.busy||active;$('#attach').disabled=state.busy||active;
+ $('#voice').disabled=state.busy||['permission','loading','transcribing','cancelling'].includes(state.voiceState);
+ $('#voice').classList.toggle('recording',active);$('#voice-label').textContent=state.voiceState==='listening'?'说好了':active?'稍等':'语音';
+ $('#voice-cancel').disabled=state.voiceState==='cancelling';$('#clear-draft').disabled=active||state.busy;
+ $('#send').textContent=state.busy?'整理中':'发送';
+}
+function setVoiceState(phase,value={}){
+ state.voiceState=phase;state.recording=phase!=='stopped';if(value.sessionId)state.voiceSessionId=value.sessionId;
+ const card=$('#voice-status');card.hidden=phase==='stopped';
+ const labels={permission:'允许我听你说一句吧。',loading:'我在准备听你说…',listening:'我在听，慢慢说。',transcribing:'正在把刚才的话写下来…',cancelling:'正在停下来，草稿还在。'};
+ if(labels[phase])$('#voice-status-label').textContent=labels[phase];
+ if(phase==='listening')$('#voice-preview').textContent='说完点“说好了”，我会先写成文字。';
+ else if(phase!=='stopped')$('#voice-preview').textContent='声音留在手机上，文字由你核对后再发送。';
+ updateComposerControls();resize();
+}
+function receiveVoice(value){
+ if(state.cancelledVoiceSessions.has(value.sessionId))return;
+ const file=value.file;if(!file?.id)return;
+ state.pending.set(file.id,file);state.files.set(file.id,file);
+ if(!state.draftAnchor&&Number.isFinite(value.capturedAt)&&value.capturedAt>0&&value.capturedZone)state.draftAnchor={capturedAt:value.capturedAt,capturedZone:value.capturedZone,anchorFileId:file.id};
+ if(value.text)$('#message-input').value=[$('#message-input').value,value.text].filter(Boolean).join('\n');
+ saveDraft();renderPending();changeView('chat');
+ toast(value.note||'听到了，先看看文字，想改哪里都可以。');
+}
+async function cancelVoice(){
+ if(state.voiceSessionId){state.cancelledVoiceSessions.add(state.voiceSessionId);if(state.cancelledVoiceSessions.size>20)state.cancelledVoiceSessions.delete(state.cancelledVoiceSessions.values().next().value);}
+ setVoiceState('cancelling');try{await call('voice',{action:'cancel'});}catch(e){setVoiceState('stopped');toast(e.message);}
+}
+function clearDraft(){state.pending.clear();state.draftAnchor=null;$('#message-input').value='';renderPending();saveDraft();toast('草稿清空了。已经记下的内容还在。');}
+
 function tagsHtml(tags=[]){return '<div class="tag-row">'+tags.map(t=>'<span class="tag">'+escapeHtml(t)+'</span>').join('')+'</div>';}
 function attachmentsHtml(ids=[]){return '<div class="message-files">'+ids.map(id=>{const f=state.files.get(id);if(!f)return '';const img=f.mime?.startsWith('image/')?'<img src="/media/'+encodeURIComponent(id)+'" alt="附件预览">':icon('paperclip');return '<button class="attachment" data-file="'+escapeHtml(id)+'">'+img+'<span>'+escapeHtml(f.name)+'</span></button>';}).join('')+'</div>';}
 function messageText(m){const content=String(m.content||''),long=content.length>1200;return '<div>'+escapeHtml(long?content.slice(0,1200)+'…':content)+'</div>'+(long?'<p class="processing-note">正文较长，先显示前 1200 字。</p><div class="reply-tools"><button class="secondary-button" data-full-message="'+escapeHtml(m.id)+'">看看全文</button></div>':'');}
@@ -40,16 +90,16 @@ function paintTasks(){const page=state.taskPage;$('#task-list').innerHTML=(page.
 async function renderTasks(more=false){if(state.view!=='tasks')return;const token=++state.taskSequence,previous=more?state.taskPage.rows:[];try{const page=await call('memoryPage',{status:state.taskStatus,tasksOnly:true,limit:40,offset:previous.length});if(token!==state.taskSequence)return;if(more)page.rows=[...previous,...page.rows];state.taskPage=page;rememberRows(page.rows);paintTasks();}catch(e){if(token===state.taskSequence)toast(e.message);}}
 function renderAll(){renderChat();paintMemories();if(state.view==='memory')renderMemories();renderTasks();$('#archive-report').textContent=state.archiveReport;}
 function renderPending(){$('#pending-files').hidden=!state.pending.size;$('#pending-files').innerHTML=[...state.pending.values()].map(f=>'<div class="pending-file"><span>'+escapeHtml(f.name)+'</span><button aria-label="移除附件" data-remove-file="'+escapeHtml(f.id)+'">×</button></div>').join('');try{localStorage.setItem('xiaohe-draft-files',JSON.stringify([...state.pending.keys()]));}catch(_){} }
-function setBusy(b){state.busy=b;if(b){clearTimeout(toastTimer);$('#toast').hidden=true;}$('#send').disabled=b;$('#attach').disabled=b;$('#voice').disabled=b;$('#send').textContent=b?'整理中':'发送';}
+function setBusy(b){state.busy=b;if(b){clearTimeout(toastTimer);$('#toast').hidden=true;}updateComposerControls();}
 async function recognizeFrames(frames){if(!frames?.length||!state.settings.localOcr)return;const groups=new Map();try{progress('我在手机上读图片里的文字…',true);ocrWorker=await Tesseract.createWorker(['chi_sim','eng'],1,{workerPath:location.origin+'/vendor/worker.min.js',corePath:location.origin+'/vendor/core',langPath:location.origin+'/vendor/lang',workerBlobURL:true,cacheMethod:'none',logger:m=>{if(m.status==='recognizing text')progress('我在读图片里的文字… '+Math.round(m.progress*100)+'%',true);}});
  for(const frame of frames){const result=await ocrWorker.recognize(frame.dataUrl);const current=groups.get(frame.sourceId)||[];current.push('['+frame.label+']\n'+result.data.text);groups.set(frame.sourceId,current);}for(const [id,parts]of groups)await call('saveOcr',{id,text:parts.join('\n\n')});
  }catch(error){toast('图片原件已经留下，文字识别这次没有完成。');}finally{if(ocrWorker){await ocrWorker.terminate();ocrWorker=null;}}}
 async function processMessage(id,fileIds,retry=false){let media={frames:[]};if(fileIds.length){progress('我在看看你交来的素材…',true);media=await call('prepareMedia',{files:fileIds});await recognizeFrames(media.frames);}loadData(await call('processMessage',{id,frames:state.settings.vision?media.frames:[],retry}));progress('这条我替你记着了。');}
-async function send(){if(state.busy)return;const input=$('#message-input');const text=input.value.trim(),files=[...state.pending.keys()];if(!text&&!files.length)return;setBusy(true);changeView('chat');let saved;
- try{const id=crypto.randomUUID?crypto.randomUUID():'message_'+Date.now()+'_'+Math.random().toString(36).slice(2);progress('先替你收下…',true);saved=await call('stageMessage',{id,text,files});state.messages.push(saved);for(const f of state.pending.values())state.files.set(f.id,f);state.pending.clear();renderPending();input.value='';saveDraft();renderChat();await processMessage(saved.id,files);}
+async function send(){if(state.busy||voiceActive())return;const input=$('#message-input');const text=input.value.trim(),files=[...state.pending.keys()];if(!text&&!files.length)return;setBusy(true);changeView('chat');let saved;
+ try{const id=crypto.randomUUID?crypto.randomUUID():'message_'+Date.now()+'_'+Math.random().toString(36).slice(2);progress('先替你收下…',true);saved=await call('stageMessage',{id,text,files,...(state.draftAnchor||{})});state.messages.push(saved);for(const f of state.pending.values())state.files.set(f.id,f);state.pending.clear();renderPending();input.value='';state.draftAnchor=null;saveDraft();renderChat();await processMessage(saved.id,files);}
  catch(error){toast(error.message);progress(saved?'原始内容已在本机，稍后可以继续整理。':'这次还没存好，输入内容仍在。');if(saved)await refresh().catch(()=>{});}finally{setBusy(false);renderChat();}}
 async function retry(id){if(state.busy)return;const message=state.messages.find(m=>m.id===id);if(!message)return;setBusy(true);try{await processMessage(id,message.files||[],true);}catch(e){toast(e.message);}finally{setBusy(false);renderChat();}}
-function showSettings(){const s=state.settings;$('#cfg-base').value=s.baseUrl||'';$('#cfg-model').value=s.model||'';$('#cfg-key').value='';$('#cfg-key').placeholder=s.hasKey?'已保存。留空则继续使用当前密钥':'填写密钥；无鉴权的本地接口可留空';$('#cfg-vision').checked=!!s.vision;$('#cfg-ocr').checked=s.localOcr!==false;$('#cfg-asr').value=s.asrUrl||'';$('#cfg-asr-model').value=s.asrModel||'whisper-1';$('#cfg-asr-key').value='';$('#cfg-asr-key').placeholder=s.hasAsrKey?'已保存。留空保留当前密钥':'同一服务可复用对话密钥，其他服务请独立填写';$('#connection-status').textContent=s.connected?'接口设置已记住，可以试着连接。':'填写后，我就能帮你自动整理了。';$('#notification-status').textContent=state.notifications===false?'设置第一条提醒时，系统会请求通知权限。':state.exactAlarms===false?'系统目前只允许大致时间的提醒，想准时提醒可开启下方权限。':'提醒在手机上安排，不依赖应用一直打开。';openSheet('settings-dialog');}
+function showSettings(){if(voiceActive())cancelVoice();const s=state.settings;$('#cfg-base').value=s.baseUrl||'';$('#cfg-model').value=s.model||'';$('#cfg-key').value='';$('#cfg-key').placeholder=s.hasKey?'已保存。留空则继续使用当前密钥':'填写密钥；无鉴权的本地接口可留空';$('#cfg-vision').checked=!!s.vision;$('#cfg-ocr').checked=s.localOcr!==false;$('#cfg-asr').value=s.asrUrl||'';$('#cfg-asr-model').value=s.asrModel||'whisper-1';$('#cfg-asr-key').value='';$('#cfg-asr-key').placeholder=s.hasAsrKey?'已保存。留空保留当前密钥':'同一服务可复用对话密钥，其他服务请独立填写';$('#connection-status').textContent=s.connected?'接口设置已记住，可以试着连接。':'填写后，我就能帮你自动整理了。';$('#notification-status').textContent=state.notifications===false?'设置第一条提醒时，系统会请求通知权限。':state.exactAlarms===false?'系统目前只允许大致时间的提醒，想准时提醒可开启下方权限。':'提醒在手机上安排，不依赖应用一直打开。';openSheet('settings-dialog');}
 async function saveSettings(){const payload={baseUrl:$('#cfg-base').value.trim(),model:$('#cfg-model').value.trim(),apiKey:$('#cfg-key').value,vision:$('#cfg-vision').checked,localOcr:$('#cfg-ocr').checked,asrUrl:$('#cfg-asr').value.trim(),asrModel:$('#cfg-asr-model').value.trim(),asrKey:$('#cfg-asr-key').value};state.settings=await call('saveSettings',payload);$('#cfg-key').value='';$('#cfg-asr-key').value='';$('#connection-status').textContent='设置记住了，密钥留在本机。';renderChat();return state.settings;}
 function beginDetail(mode,id=state.detail){state.detail=id;state.detailMode=mode;return ++state.detailSequence;}
 function detailCurrent(token,id){return state.detailSequence===token&&state.detail===id&&$('#detail-dialog').open;}
@@ -84,7 +134,7 @@ async function action(button){
   else if(button.dataset.memory)showDetail(button.dataset.memory);
   else if(button.dataset.retry)await retry(button.dataset.retry);
   else if(button.hasAttribute('data-setup'))showSettings();
-  else if(button.dataset.removeFile){state.pending.delete(button.dataset.removeFile);renderPending();}
+  else if(button.dataset.removeFile){state.pending.delete(button.dataset.removeFile);renderPending();saveDraft();}
   else if(button.dataset.changeStatus){await updateMemory({status:button.dataset.changeStatus},context);toast(button.dataset.changeStatus==='completed'?'完成了，我记下了。':'这条记忆的位置调整好了。');}
   else if(button.hasAttribute('data-reminder')){const result=await call('reminder',{id:context.id});if(result?.id){await refreshDetail(context.id,context);const row=state.memories.find(r=>r.id===context.id)||result;toast(reminderScheduled(row)?'提醒安排好了。':'时间记下了，提醒先留着。');}else if(detailCurrent(context.token,context.id))showDetail(context.id);}
   else if(button.hasAttribute('data-edit-memory')){const r=state.memories.find(m=>m.id===context.id);$('#detail-body').innerHTML='<label>想补充或更正的内容<textarea class="editor" id="memory-editor"></textarea></label><div class="button-row"><button class="primary-button" data-save-edit>记住更正</button><button class="secondary-button" data-cancel-edit>返回</button></div>';$('#memory-editor').value=r.dateNormalizedContent||r.content||'';}
@@ -97,7 +147,13 @@ $$('[data-close]').forEach(b=>b.addEventListener('click',()=>closeSheet(b.datase
 $('#settings-open').addEventListener('click',showSettings);$('#send').addEventListener('click',send);$('#message-input').addEventListener('input',saveDraft);
 $('#message-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();send();}});
 $('#attach').addEventListener('click',async()=>{try{const r=await call('pickFiles');for(const f of r.files||[])state.pending.set(f.id,f);renderPending();}catch(e){toast(e.message);}});
-$('#voice').addEventListener('click',()=>call('voice').catch(e=>toast(e.message)));
+$('#voice').addEventListener('click',async()=>{
+ if(state.busy||['permission','loading','transcribing','cancelling'].includes(state.voiceState))return;
+ const stopping=state.voiceState==='listening';$('#message-input').blur();setVoiceState(stopping?'transcribing':'loading');
+ try{await call('voice',{action:stopping?'stop':'start'});}catch(e){setVoiceState('stopped');toast(e.message);}
+});
+$('#voice-cancel').addEventListener('click',cancelVoice);
+$('#clear-draft').addEventListener('click',clearDraft);
 $('#save-settings').addEventListener('click',()=>saveSettings().catch(e=>toast(e.message)));
 $('#test-connection').addEventListener('click',async()=>{const b=$('#test-connection');b.disabled=true;$('#connection-status').textContent='我在试着连接…';try{await saveSettings();const r=await call('testConnection');$('#connection-status').textContent=r.ok?'连上了。可以开始把事情交给我了。':'这次没连上。';}catch(e){$('#connection-status').textContent=e.message;}finally{b.disabled=false;}});
 $('#export-backup').addEventListener('click',async()=>{try{const r=await call('export');if(r.ok)toast('完整备份已经导出，原始素材也一起收好了。');}catch(e){toast(e.message);}});
@@ -174,7 +230,7 @@ async function careAction(b,context){
  return false;
 }
 
-window.App={back(){const open=$$('dialog[open]');if(open.length){closeSheet(open[open.length-1].id);return true;}if(state.view!=='chat'){changeView('chat');return true;}return false;}};
+window.App={back(){if(voiceActive()){cancelVoice();return true;}const open=$$('dialog[open]');if(open.length){closeSheet(open[open.length-1].id);return true;}if(state.view!=='chat'){changeView('chat');return true;}return false;}};
 function resize(){
  const viewport=window.visualViewport;
  const height=Math.max(1,Math.floor(Math.min(innerHeight,viewport&&Math.abs(viewport.scale-1)<.02?viewport.height:innerHeight)));
@@ -194,5 +250,10 @@ window.visualViewport?.addEventListener('resize',resize);
 window.visualViewport?.addEventListener('scroll',resize);
 document.addEventListener('focusin',()=>requestAnimationFrame(resize));
 resize();initIcons();
-try{$('#message-input').value=localStorage.getItem('xiaohe-draft')||'';}catch(_){}
+try{
+ $('#message-input').value=localStorage.getItem('xiaohe-draft')||'';
+ const anchor=JSON.parse(localStorage.getItem('xiaohe-draft-anchor')||'null');
+ if(anchor&&Number.isFinite(anchor.capturedAt)&&anchor.capturedAt>0&&typeof anchor.capturedZone==='string'&&typeof anchor.anchorFileId==='string')state.draftAnchor=anchor;
+}catch(_){}
+renderDraftOrigin();
 refresh().catch(error=>{progress(error.message);$('#chat-log').innerHTML='<div class="welcome"><h1>我在，慢慢说。</h1><p>正在打开本机记忆，请稍后再试。</p></div>';});

@@ -26,7 +26,9 @@ Android 11 及以上显式处理键盘与系统栏边距，实际调整 WebView 
 
 主模型默认只处理文字。“这个模型能看图片”默认关闭。开启后，当次图片抽样会发到该模型接口。截图文字使用安装包内的中英文 Tesseract OCR 在本机提取，不依赖网络下载。
 
-语音素材与视频声音使用独立的 OpenAI-compatible `/audio/transcriptions` 转写接口；与主模型同一服务（协议、主机和端口一致）时可以复用密钥，也可单独填写转写服务和密钥。未连接转写服务时保留原件并标注未转写。Android 12 以上设备如果提供本机语音识别，实时语音输入会优先使用本机识别。
+聊天里的“语音”使用内置 sherpa-onnx 与中文 Zipformer14M 模型，在手机上录音并转成文字，不依赖系统中文识别服务，也不用配置转写接口。停止后文字回填草稿，校对后自行发送；录音原件留在本机，识别失败没有上传音频的自动回退。第一次语音的时间与时区跟随当前草稿，追加、编辑与重试保留这个基准，发送或清空草稿后重置。
+
+从其他 App 导入的音频素材、视频声音仍使用独立的 OpenAI-compatible `/audio/transcriptions` 转写接口；这部分未连接服务时保留原件并标注未转写。与主模型同一服务（协议、主机和端口一致）时可以复用密钥，也可单独填写转写服务和密钥。
 
 ## 输入和查找
 
@@ -57,24 +59,29 @@ Android 11 及以上显式处理键盘与系统栏边距，实际调整 WebView 
 - 视频：抽样 7 个画面；声音由独立转写接口处理。完整视频保留。
 - TXT、Markdown、CSV、JSON 等：本机读取前 2 MB，完整文件保留。
 - DOCX、PPTX、XLSX：本机提取文字，嵌入图片与排版不属于文字提取范围。
-- 语音转写：当前单次上传上限为 25 MB；更长音频可以分段导入。
+- 麦克风语音：内置轻量普通话模型，文字需要校对；噪声、方言、专有名词可能降低准确率。
+- 导入音频转写：当前独立接口单次上传上限为 25 MB；更长音频可以分段导入。
 - 需要登录、禁止读取或主要由网页脚本生成的链接，可能无法解析，会保留原链接并标明状态。
 
 识别不是原件的替代品。无法识别的部分会保留原件和说明，模型不会被要求猜测缺少的内容。
 
 ## 编译
 
-用 Android Studio 打开此目录即可使用标准 Gradle 工程。项目使用 AGP 8.9.2、Android SDK 35，Gradle 至少 8.11.1，JDK 至少 17；只有 Android 平台依赖，没有业务服务器依赖。
+用 Android Studio 打开此目录即可使用标准 Gradle 工程。项目使用 AGP 8.9.2、Android SDK 35，Gradle 至少 8.11.1，JDK 至少 17；没有业务服务器依赖。
+
+构建机需要 Python 3.11 以上。`prepare-asr.py` 下载 `asr-dependencies.json` 固定的 AAR、Kotlin 运行库与模型，校验 SHA-256 后提取到忽略提交的 `build/`。首次构建需要联网；已准备三个文件的机器可用 `python prepare-asr.py --cache <缓存目录>`。Gradle 的预构建任务也会准备这些依赖，可用 `XIAOHE_PYTHON` 指定 Python。安装后的应用不运行下载脚本、不下载语音模型。
 
 `build-android.ps1` 是当前工作区的直接编译脚本，使用 SDK 的 aapt2、d8、zipalign 和 apksigner。签名私钥留在构建工作区，不包含在源代码包中。后续同一安装的升级包必须继续使用同一签名密钥。
 
-独立 worktree 可通过 `-ToolsRoot` 指定现有构建工具目录，通过 `-OutputRoot` 指定制品输出目录；版本与 APK 文件名从 Manifest 读取。键盘回归的入口是 `verification/build-keyboard-tests.ps1`，需传入同一工具目录和应用的 `classes.jar`；测试设备限定为隔离的 `emulator-5556`。
+独立 worktree 可通过 `-ToolsRoot` 指定现有构建工具目录，通过 `-OutputRoot` 指定制品输出目录，`-AsrCache` 使用已有语音依赖缓存；版本与 APK 文件名从 Manifest 读取。键盘回归的入口是 `verification/build-keyboard-tests.ps1`，需传入同一工具目录和应用的 `classes.jar`；测试设备限定为隔离的 `emulator-5556`。
 
 ## 第三方资源
 
 安装包包含 Tesseract.js 6.0.1、tesseract.js-core 6.0.0，以及中文简体和英文语言数据。许可证保存在 `app/src/main/assets/vendor/TESSERACT-LICENSE.md`。
 
 来源：[Tesseract.js](https://github.com/naptha/tesseract.js)、[Tesseract.js Core](https://github.com/naptha/tesseract.js-core)、[语言数据](https://github.com/naptha/tessdata)。
+
+离线语音包含 sherpa-onnx 1.13.8（Apache-2.0）、中文 Zipformer14M 模型（发布方独立声明 Apache-2.0）、Kotlin 1.7.20（Apache-2.0）及 SDK 内嵌 ONNX Runtime（MIT）。四种 Android ABI 随 APK 提供；模型约 31 MB，安装包会大于早期版本。来源、固定校验值见 `asr-dependencies.json`，许可与模型声明随 APK 保存在 `app/src/main/assets/licenses/`。任务方案和验证维护在 [Issue #4](https://github.com/jnzhsh/xiaohe/issues/4)。
 
 ## 1.1 记忆与版本
 

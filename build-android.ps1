@@ -1,4 +1,4 @@
-param([switch]$Debug,[string]$ToolsRoot='', [string]$OutputRoot='')
+param([switch]$Debug,[string]$ToolsRoot='', [string]$OutputRoot='', [string]$AsrCache='')
 $ErrorActionPreference = 'Stop'
 $taskProject = $PSScriptRoot
 $taskWorkspace = Split-Path $taskProject -Parent
@@ -19,18 +19,23 @@ $taskSigner = Join-Path $taskToolBin 'lib/apksigner.jar'
 if (-not $taskPlatform -or -not $taskAapt) { throw 'Android build tools unavailable' }
 foreach ($taskDir in @($taskBuild,(Join-Path $taskBuild 'gen'),(Join-Path $taskBuild 'classes'),(Join-Path $taskBuild 'dex'),$taskOutput)) { New-Item -ItemType Directory -Path $taskDir -Force | Out-Null }
 function Invoke-TaskTool([string]$Program,[string[]]$ToolArgs) { & $Program @ToolArgs; if ($LASTEXITCODE -ne 0) { throw "Tool failed: $Program ($LASTEXITCODE)" } }
+$taskPrepareArgs = @((Join-Path $taskProject 'prepare-asr.py'))
+if($AsrCache){$taskPrepareArgs += @('--cache',[IO.Path]::GetFullPath($AsrCache))}
+Invoke-TaskTool $taskPython $taskPrepareArgs
+$taskDependencyJars = @((Join-Path $taskBuild 'thirdparty/classes.jar'),(Join-Path $taskBuild 'thirdparty/kotlin-stdlib-1.7.20.jar'))
+$taskClasspath = (@($taskPlatform)+$taskDependencyJars) -join ';'
 Invoke-TaskTool $taskAapt @('compile','--dir',(Join-Path $taskSource 'res'),'-o',(Join-Path $taskBuild 'resources.zip'))
 $taskManifest = Join-Path $taskSource 'AndroidManifest.xml'
 if ($Debug) { $taskDebugManifest = Join-Path $taskBuild 'AndroidManifest-debug.xml'; [IO.File]::WriteAllText($taskDebugManifest,[IO.File]::ReadAllText($taskManifest).Replace('<application ','<application android:debuggable="true" '),[Text.UTF8Encoding]::new($false));$taskManifest = $taskDebugManifest }
-Invoke-TaskTool $taskAapt @('link','-o',(Join-Path $taskBuild 'resources.apk'),'-I',$taskPlatform,'--manifest',$taskManifest,'--java',(Join-Path $taskBuild 'gen'),'--min-sdk-version','26','--target-sdk-version','35','-A',(Join-Path $taskSource 'assets'),'--auto-add-overlay',(Join-Path $taskBuild 'resources.zip'))
+Invoke-TaskTool $taskAapt @('link','-o',(Join-Path $taskBuild 'resources.apk'),'-I',$taskPlatform,'--manifest',$taskManifest,'--java',(Join-Path $taskBuild 'gen'),'--min-sdk-version','26','--target-sdk-version','35','-A',(Join-Path $taskSource 'assets'),'-A',(Join-Path $taskBuild 'generated/asr-assets'),'--auto-add-overlay',(Join-Path $taskBuild 'resources.zip'))
 $taskSources = @(Get-ChildItem -LiteralPath (Join-Path $taskSource 'java') -Recurse -Filter '*.java' | Select-Object -ExpandProperty FullName) + @(Get-ChildItem -LiteralPath (Join-Path $taskBuild 'gen') -Recurse -Filter '*.java' | Select-Object -ExpandProperty FullName)
 $taskSourceList = Join-Path $taskBuild 'sources.txt'
 [IO.File]::WriteAllLines($taskSourceList, @($taskSources | ForEach-Object { '"' + $_.Replace('\','/') + '"' }), [Text.UTF8Encoding]::new($false))
-Invoke-TaskTool (Join-Path $taskJavaDir 'javac.exe') @('-encoding','UTF-8','--release','8','-classpath',$taskPlatform,'-d',(Join-Path $taskBuild 'classes'),('@'+$taskSourceList))
+Invoke-TaskTool (Join-Path $taskJavaDir 'javac.exe') @('-encoding','UTF-8','--release','8','-classpath',$taskClasspath,'-d',(Join-Path $taskBuild 'classes'),('@'+$taskSourceList))
 Invoke-TaskTool (Join-Path $taskJavaDir 'jar.exe') @('--create','--file',(Join-Path $taskBuild 'classes.jar'),'-C',(Join-Path $taskBuild 'classes'),'.')
-Invoke-TaskTool (Join-Path $taskJavaDir 'java.exe') @('-cp',$taskD8,'com.android.tools.r8.D8','--min-api','26','--lib',$taskPlatform,'--output',(Join-Path $taskBuild 'dex'),(Join-Path $taskBuild 'classes.jar'))
+Invoke-TaskTool (Join-Path $taskJavaDir 'java.exe') (@('-cp',$taskD8,'com.android.tools.r8.D8','--min-api','26','--lib',$taskPlatform,'--output',(Join-Path $taskBuild 'dex'),(Join-Path $taskBuild 'classes.jar'))+$taskDependencyJars)
 Invoke-TaskTool $taskPython @((Join-Path $taskProject 'package-apk.py'),$taskBuild)
-Invoke-TaskTool (Join-Path $taskToolBin 'zipalign.exe') @('-f','4',(Join-Path $taskBuild 'unsigned.apk'),(Join-Path $taskBuild 'aligned.apk'))
+Invoke-TaskTool (Join-Path $taskToolBin 'zipalign.exe') @('-f','-P','16','4',(Join-Path $taskBuild 'unsigned.apk'),(Join-Path $taskBuild 'aligned.apk'))
 $taskKeyStore = Join-Path $taskTools 'xiaohe-signing.jks'
 $taskSecretPath = Join-Path $taskTools 'xiaohe-signing.secret'
 if (-not (Test-Path -LiteralPath $taskSecretPath)) { $taskBytes = [byte[]]::new(24);[Security.Cryptography.RandomNumberGenerator]::Fill($taskBytes);[IO.File]::WriteAllText($taskSecretPath,[Convert]::ToBase64String($taskBytes),[Text.UTF8Encoding]::new($false)) }
