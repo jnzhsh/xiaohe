@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app.xiaohe.assistant.topicstests">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+  <application android:label="小禾主题验证" android:debuggable="true" />
+  <instrumentation android:name="app.xiaohe.tests.TopicsTest" android:targetPackage="app.xiaohe.assistant" />
+</manifest>
