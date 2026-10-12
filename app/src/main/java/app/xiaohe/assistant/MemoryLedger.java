@@ -134,8 +134,31 @@ public final class MemoryLedger {
     JSONArray out=new JSONArray();for(JSONObject r:found.values()){if(out.length()>=limit)break;if(r.optString("referenceState").equals("unresolved")||r.optBoolean("structuredReview"))r.put("queryCaution","对象或更正后的结构仍不确定，原话已保留");out.put(r);}return out;
   }
   public JSONObject page(JSONObject args)throws Exception {
-    int offset=Math.max(0,args.optInt("offset")),size=Math.min(100,Math.max(1,args.optInt("limit",40)));String status=args.optString("status","active"),tag=args.optString("tag"),q=args.optString("query");List<String> params=new ArrayList<>();String where="1=1";
-    if(args.optBoolean("tasksOnly")){where+=" AND type IN ('task','event') AND status=?";params.add(status);}else if(status.equals("active"))where+=" AND status<>'archived'";else if(!status.equals("all")){where+=" AND status=?";params.add(status);}if(!tag.isEmpty()){where+=" AND id IN (SELECT memory_id FROM memory_tags WHERE tag=?)";params.add(tag);}if(args.optBoolean("attention")){where+=" AND id IN (SELECT memory_id FROM memory_attention)";}if(!q.trim().isEmpty()){String words=MemorySchema.terms(Store.shorten(q,160));StringBuilder m=new StringBuilder();for(String t:words.split(" +")){if(t.length()<2)continue;if(m.length()>0)m.append(" OR ");m.append('"').append(t.replace("\"","\"\"")).append('"');}if(m.length()>0){where+=" AND id IN (SELECT memory_id FROM memory_fts WHERE memory_fts MATCH ?)";params.add(m.toString());}else{where+=" AND data LIKE ? ESCAPE '\\'";params.add("%"+q.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%");}}
-    String[] p=params.toArray(new String[0]);int count;try(Cursor c=store.getReadableDatabase().rawQuery("SELECT COUNT(*) FROM memories WHERE "+where,p)){c.moveToFirst();count=c.getInt(0);}params.add(""+size);params.add(""+offset);String order=args.optBoolean("tasksOnly")?"CASE WHEN event_start>0 THEN 0 ELSE 1 END,event_start ASC,created DESC":"created DESC";JSONArray rows=query("SELECT data FROM memories WHERE "+where+" ORDER BY "+order+" LIMIT ? OFFSET ?",params.toArray(new String[0]));JSONArray tags=new JSONArray();try(Cursor c=store.getReadableDatabase().rawQuery("SELECT DISTINCT tag FROM memory_tags ORDER BY tag",null)){while(c.moveToNext())tags.put(c.getString(0));}return new JSONObject().put("rows",rows).put("total",count).put("tags",tags).put("offset",offset).put("hasMore",offset+rows.length()<count);
+    int offset=Math.max(0,args.optInt("offset")),size=Math.min(100,Math.max(1,args.optInt("limit",40)));
+    String status=args.optString("status","active"),tag=args.optString("tag"),q=args.optString("query");
+    List<String> scopeParams=new ArrayList<>();String scope="1=1";
+    if(args.optBoolean("tasksOnly")){scope+=" AND m.type IN ('task','event') AND m.status=?";scopeParams.add(status);}
+    else if(status.equals("active"))scope+=" AND m.status<>'archived'";
+    else if(!status.equals("all")){scope+=" AND m.status=?";scopeParams.add(status);}
+    if(args.optBoolean("attention"))scope+=" AND m.id IN (SELECT memory_id FROM memory_attention)";
+    if(!q.trim().isEmpty()){
+      String words=MemorySchema.terms(Store.shorten(q,160));StringBuilder match=new StringBuilder();
+      for(String token:words.split(" +")){if(token.length()<2)continue;if(match.length()>0)match.append(" OR ");match.append('"').append(token.replace("\"","\"\"")).append('"');}
+      if(match.length()>0){scope+=" AND m.id IN (SELECT memory_id FROM memory_fts WHERE memory_fts MATCH ?)";scopeParams.add(match.toString());}
+      else{scope+=" AND m.data LIKE ? ESCAPE '\\'";scopeParams.add("%"+q.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%");}
+    }
+    // Each facet excludes its own selection, while respecting the other facet.
+    List<String> tagParams=new ArrayList<>(scopeParams);String withTag=scope;
+    if(!tag.isEmpty()){withTag+=" AND m.id IN (SELECT memory_id FROM memory_tags WHERE tag=?)";tagParams.add(tag);}
+    List<String> themeParams=new ArrayList<>(scopeParams);String withTheme=MemoryTopics.filter(scope,themeParams,args);
+    SQLiteDatabase db=store.getReadableDatabase();JSONArray themes=MemoryTopics.themes(db,withTag,tagParams),tagCounts=MemoryTopics.tags(db,withTheme,themeParams),tags=new JSONArray();
+    for(int i=0;i<tagCounts.length();i++)tags.put(tagCounts.getJSONObject(i).getString("tag"));
+    int scopeTotal=0;for(int i=0;i<themes.length();i++)scopeTotal+=themes.getJSONObject(i).getInt("count");
+    List<String> params=new ArrayList<>(tagParams);String where=MemoryTopics.filter(withTag,params,args);int count;
+    try(Cursor cursor=db.rawQuery("SELECT COUNT(*) FROM memories m WHERE "+where,params.toArray(new String[0]))){cursor.moveToFirst();count=cursor.getInt(0);}
+    params.add(""+size);params.add(""+offset);
+    String order=args.optBoolean("tasksOnly")?"CASE WHEN m.event_start>0 THEN 0 ELSE 1 END,m.event_start ASC,m.created DESC,m.id DESC":"m.created DESC,m.id DESC";
+    JSONArray rows=query("SELECT m.data FROM memories m WHERE "+where+" ORDER BY "+order+" LIMIT ? OFFSET ?",params.toArray(new String[0]));
+    return new JSONObject().put("rows",rows).put("total",count).put("themes",themes).put("scopeTotal",scopeTotal).put("tags",tags).put("tagCounts",tagCounts).put("offset",offset).put("hasMore",offset+rows.length()<count);
   }
 }
