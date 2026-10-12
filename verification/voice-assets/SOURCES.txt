@@ -1,0 +1,11 @@
+0.wav, 8k.wav:
+公开 sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23 模型包 test_wavs。
+https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23.tar.bz2
+来源包SHA-256见仓库asr-dependencies.json；发布方声明Apache-2.0见app/src/main/assets/licenses/MODEL-README.txt。
+0.wav参考文字：对我做了介绍那么我想说的是大家如果对我的研究感兴趣
+8k.wav只检查可解码，不声明参考文字或逐字准确率。
+
+tomorrow-zh.wav:
+由Windows本机Microsoft Huihui Desktop普通话TTS产生的合成测试语音。
+内容：明天下午三点提醒我去买咖啡。
+16kHz、单声道、16bit PCM，无真人声音或个人记录。

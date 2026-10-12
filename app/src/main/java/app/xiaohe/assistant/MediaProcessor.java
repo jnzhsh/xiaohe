@@ -31,8 +31,20 @@ public final class MediaProcessor {
     JSONObject f=new JSONObject().put("id",id).put("created",System.currentTimeMillis()).put("name",name).put("mime",mime).put("size",size).put("sha256",hex(digest.digest())).put("text","").put("processingNote","原件已保存在本机，尚未解析");store.put("files",f);return f;
   }
   public JSONObject recorded(File recording)throws Exception {String id=UUID.randomUUID().toString();File target=store.filePath(id);try(InputStream in=new FileInputStream(recording);OutputStream out=new FileOutputStream(target)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}JSONObject f=new JSONObject().put("id",id).put("created",System.currentTimeMillis()).put("name","语音-"+System.currentTimeMillis()+".m4a").put("mime","audio/mp4").put("size",target.length()).put("sha256",hash(target)).put("text","").put("processingNote","语音原件已保存，尚未转写");store.put("files",f);recording.delete();return f;}
+  public JSONObject recordedOffline(File recording,String text,long capturedAt,String capturedZone)throws Exception {
+    String id=UUID.randomUUID().toString();File target=store.filePath(id);
+    try{try(InputStream in=new FileInputStream(recording);OutputStream out=new FileOutputStream(target)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}
+      JSONObject f=new JSONObject().put("id",id).put("created",capturedAt).put("capturedAt",capturedAt).put("capturedZone",capturedZone)
+        .put("name","语音-"+new java.text.SimpleDateFormat("MMdd-HHmm",Locale.ROOT).format(new Date(capturedAt))+".wav")
+        .put("mime","audio/wav").put("size",target.length()).put("sha256",hash(target)).put("recorded",true).put("localVoice",true)
+        .put("text",text==null?"":text).put("processingNote",text==null||text.isEmpty()?"本机中文识别没有得到清晰文字，声音原件已保存在本机；不会自动上传转写":"已在本机识别中文，发送前可以修改文字；声音原件保存在本机");
+      store.put("files",f);recording.delete();return f;
+    }catch(Exception e){target.delete();throw e;}
+  }
   public JSONObject prepare(JSONArray ids)throws Exception {JSONArray frames=new JSONArray(),notes=new JSONArray();Settings settings=new Settings(context);
     for(int i=0;i<ids.length();i++){JSONObject f=store.one("files",ids.getString(i));if(f==null)continue;String mime=f.optString("mime"),name=f.optString("name").toLowerCase(Locale.ROOT),note="";File path=store.filePath(f.getString("id"));
+      // A failed/empty local result also stays local, even when an upload service is configured.
+      if(f.optBoolean("localVoice")){notes.put(new JSONObject().put("id",f.getString("id")).put("note",f.optString("processingNote")));continue;}
       try {
         if(mime.startsWith("image/")){BitmapFactory.Options opt=new BitmapFactory.Options();opt.inJustDecodeBounds=true;BitmapFactory.decodeFile(path.getAbsolutePath(),opt);opt.inSampleSize=Math.max(1,Math.max(opt.outWidth,opt.outHeight)/1800);opt.inJustDecodeBounds=false;Bitmap b=BitmapFactory.decodeFile(path.getAbsolutePath(),opt);if(b==null)throw new IOException("图片格式无法解码");frames.put(frame(b,f.getString("id"),"图片："+f.optString("name")));note="图片文字将由本机OCR识别；原图已保留";}
         else if(mime.equals("application/pdf")||name.endsWith(".pdf")){try(ParcelFileDescriptor pfd=ParcelFileDescriptor.open(path,ParcelFileDescriptor.MODE_READ_ONLY);PdfRenderer renderer=new PdfRenderer(pfd)){int total=renderer.getPageCount();for(int p=0;p<Math.min(total,5);p++)try(PdfRenderer.Page page=renderer.openPage(p)){float scale=1200f/page.getWidth();Bitmap b=Bitmap.createBitmap(1200,Math.max(1,(int)(page.getHeight()*scale)),Bitmap.Config.ARGB_8888);b.eraseColor(Color.WHITE);page.render(b,null,null,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);frames.put(frame(b,f.getString("id"),"PDF第"+(p+1)+"页"));}note="本次识别前"+Math.min(total,5)+"页，共"+total+"页；完整PDF保存在本机";}}

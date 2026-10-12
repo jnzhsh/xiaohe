@@ -57,8 +57,11 @@ public final class Store extends SQLiteOpenHelper {
     if(!target.getParentFile().equals(mediaDir().getCanonicalFile())) throw new IOException("无效附件路径");return target;
   }
   public JSONObject message(String role,String text,JSONArray files,String id) throws Exception {
+    return message(role,text,files,id,System.currentTimeMillis(),TimeZone.getDefault().getID());
+  }
+  public JSONObject message(String role,String text,JSONArray files,String id,long capturedAt,String capturedZone) throws Exception {
     JSONObject existing=one("messages",id);if(existing!=null)return existing;
-    JSONObject m=new JSONObject();long now=System.currentTimeMillis();m.put("id",id);m.put("created",now);m.put("capturedAt",now);m.put("capturedZone",TimeZone.getDefault().getID());m.put("role",role);m.put("content",text);m.put("files",files==null?new JSONArray():files);if(role.equals("user")){JSONArray recent=rows("SELECT data FROM (SELECT data,created FROM messages ORDER BY created DESC LIMIT 12) ORDER BY created ASC"),ids=new JSONArray();for(int i=0;i<recent.length();i++)ids.put(recent.getJSONObject(i).getString("id"));m.put("contextMessageIds",ids);}put("messages",m);return m;
+    JSONObject m=new JSONObject();long now=System.currentTimeMillis();m.put("id",id);m.put("created",now);m.put("capturedAt",capturedAt);m.put("capturedZone",capturedZone);m.put("role",role);m.put("content",text);m.put("files",files==null?new JSONArray():files);if(role.equals("user")){JSONArray recent=rows("SELECT data FROM (SELECT data,created FROM messages ORDER BY created DESC LIMIT 12) ORDER BY created ASC"),ids=new JSONArray();for(int i=0;i<recent.length();i++)ids.put(recent.getJSONObject(i).getString("id"));m.put("contextMessageIds",ids);}put("messages",m);return m;
   }
   public JSONObject reply(String text,String sourceId,String error) throws Exception {
     JSONObject m=message("assistant",text,new JSONArray(),UUID.randomUUID().toString());m.put("sourceId",sourceId);if(error!=null&&!error.isEmpty())m.put("error",error);put("messages",m);return m;
