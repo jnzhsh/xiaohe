@@ -15,3 +15,6 @@
 html,body{height:100%;overflow:hidden}
 .viewport-short .bottom-nav{display:none}.viewport-compact .app-header{padding-top:8px;padding-bottom:8px}.viewport-compact #composer-wrap{padding-top:4px;padding-bottom:4px}.viewport-compact .composer{padding:8px 12px}
 .viewport-short .app-header,.viewport-short #progress{display:none}.viewport-short .sheet{max-height:calc(var(--vh) - 8px)}.viewport-short .sheet-header{padding:4px 12px}.viewport-short .sheet-body{padding:8px 14px;max-height:calc(var(--vh) - 64px)}.viewport-short .editor{min-height:70px;max-height:calc(var(--vh) - 120px)}
+
+/* Browse broad themes first; keep detailed tags available on demand. */
+.memory-browse{border-bottom:1px solid var(--line);padding:0 0 10px;margin:0 0 12px}.memory-browse summary{min-height:44px;display:list-item;cursor:pointer;color:var(--muted);font-size:.875rem;padding:8px 0}.memory-browse input{margin:5px 0 8px}.category-filters small{opacity:.75;margin-left:4px}.category-filters .help{width:100%;margin:8px 0}.memory-current-filter{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:.8125rem;color:var(--muted);margin-bottom:12px}.memory-current-filter span{overflow-wrap:anywhere}.tag-more{background:transparent;color:var(--muted)}
