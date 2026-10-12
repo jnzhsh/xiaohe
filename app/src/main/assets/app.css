@@ -13,5 +13,5 @@
 
 /* Keep editing and sending available when the keyboard leaves a short viewport. */
 html,body{height:100%;overflow:hidden}
-.viewport-compact .bottom-nav{display:none}.viewport-compact .app-header{padding-top:8px;padding-bottom:8px}.viewport-compact #composer-wrap{padding-top:4px;padding-bottom:4px}.viewport-compact .composer{padding:8px 12px}
+.viewport-short .bottom-nav{display:none}.viewport-compact .app-header{padding-top:8px;padding-bottom:8px}.viewport-compact #composer-wrap{padding-top:4px;padding-bottom:4px}.viewport-compact .composer{padding:8px 12px}
 .viewport-short .app-header,.viewport-short #progress{display:none}.viewport-short .sheet{max-height:calc(var(--vh) - 8px)}.viewport-short .sheet-header{padding:4px 12px}.viewport-short .sheet-body{padding:8px 14px;max-height:calc(var(--vh) - 64px)}.viewport-short .editor{min-height:70px;max-height:calc(var(--vh) - 120px)}

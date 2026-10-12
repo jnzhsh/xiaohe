@@ -63,6 +63,7 @@ public final class KeyboardViewportSmoke {
         check("true".equals(ClipboardSmoke.evaluate(test,web,"document.getElementById('message-input').value==="+JSONObject.quote(DRAFT))),"Multiline draft survives repeated IME changes");
       }
       keyboard(test,activity,web,false);JSONObject restored=geometry(test,activity,web,"message-input");stages.put("restored",restored);check(Math.abs(restored.getJSONObject("dom").getDouble("innerHeight")-closed.getJSONObject("dom").getDouble("innerHeight"))<=2,"Closing keyboard restores page height without blank space");
+      check("true".equals(ClipboardSmoke.evaluate(test,web,"document.querySelector('.bottom-nav').getBoundingClientRect().height>0")),"Closing keyboard keeps page navigation available in both orientations");
       ClipboardSmoke.evaluate(test,web,"(()=>{showSettings();const key=document.getElementById('cfg-key');key.value='FAKE_KEY_FOR_KEYBOARD_TEST';key.scrollIntoView({block:'center'});return true;})()");Thread.sleep(150);
       ClipboardSmoke.tap(test,web,"cfg-key");keyboard(test,activity,web,true);JSONObject settings=geometry(test,activity,web,"cfg-key");stages.put("settings",settings);saveEvidence(test,activity,phase,"settings",settings);
       check(settings.getDouble("inputScreenBottom")<=settings.getJSONObject("native").getDouble("safeBottom")+4,"Focused settings input remains above IME: "+settings);

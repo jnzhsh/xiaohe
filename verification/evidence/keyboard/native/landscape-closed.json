@@ -3,12 +3,12 @@
     "innerHeight": 388,
     "innerWidth": 732,
     "input": {
-      "bottom": 296.6190490722656,
-      "top": 238.61904907226562
+      "bottom": 234.61904907226562,
+      "top": 176.61904907226562
     },
     "send": {
-      "bottom": 346.00000381469727,
-      "top": 301.6190490722656
+      "bottom": 284.00000381469727,
+      "top": 239.61904907226562
     },
     "visualHeight": 388.19049072265625
   },
@@ -21,6 +21,6 @@
     "imeShown": false,
     "safeBottom": 1080
   },
-  "inputScreenBottom": 841.0171778944672,
-  "sendScreenBottom": 970.5409936123207
+  "inputScreenBottom": 678.394227074795,
+  "sendScreenBottom": 807.9180427926485
 }
