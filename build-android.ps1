@@ -1,11 +1,14 @@
-param([switch]$Debug)
+param([switch]$Debug,[string]$ToolsRoot='', [string]$OutputRoot='')
 $ErrorActionPreference = 'Stop'
 $taskProject = $PSScriptRoot
 $taskWorkspace = Split-Path $taskProject -Parent
-$taskTools = Join-Path $taskWorkspace 'android-tools'
+$taskTools = if($ToolsRoot){[IO.Path]::GetFullPath($ToolsRoot)}else{Join-Path $taskWorkspace 'android-tools'}
 $taskBuild = Join-Path $taskProject 'build'
 $taskSource = Join-Path $taskProject 'app/src/main'
-$taskOutput = [IO.Path]::GetFullPath((Join-Path $taskWorkspace '../outputs'))
+$taskOutput = if($OutputRoot){[IO.Path]::GetFullPath($OutputRoot)}else{[IO.Path]::GetFullPath((Join-Path $taskWorkspace '../outputs'))}
+$taskManifestXml = [xml](Get-Content -LiteralPath (Join-Path $taskSource 'AndroidManifest.xml') -Raw)
+$taskVersion = $taskManifestXml.manifest.GetAttribute('versionName','http://schemas.android.com/apk/res/android')
+if($taskVersion -notmatch '^\d+\.\d+\.\d+$'){throw 'Invalid Android version name'}
 $taskJavaDir = 'C:/Program Files/OpenJDK/jdk-22.0.2/bin'
 $taskPython = 'C:/Users/sino/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
 $taskPlatform = Get-ChildItem -LiteralPath (Join-Path $taskTools 'platform') -Recurse -Filter 'android.jar' | Select-Object -First 1 -ExpandProperty FullName
@@ -34,7 +37,7 @@ if (-not (Test-Path -LiteralPath $taskSecretPath)) { $taskBytes = [byte[]]::new(
 $env:XIAOHE_BUILD_SECRET = [IO.File]::ReadAllText($taskSecretPath).Trim()
 try {
   if (-not (Test-Path -LiteralPath $taskKeyStore)) { Invoke-TaskTool (Join-Path $taskJavaDir 'keytool.exe') @('-genkeypair','-keystore',$taskKeyStore,'-storepass:env','XIAOHE_BUILD_SECRET','-keypass:env','XIAOHE_BUILD_SECRET','-alias','xiaohe','-keyalg','RSA','-keysize','2048','-validity','10000','-dname','CN=Xiaohe','-noprompt') }
-  $taskApk = if ($Debug) { Join-Path $taskBuild 'Xiaohe-test.apk' } else { Join-Path $taskOutput 'Xiaohe-1.2.1.apk' }
+  $taskApk = if ($Debug) { Join-Path $taskBuild 'Xiaohe-test.apk' } else { Join-Path $taskOutput ('Xiaohe-'+$taskVersion+'.apk') }
   Invoke-TaskTool (Join-Path $taskJavaDir 'java.exe') @('-jar',$taskSigner,'sign','--ks',$taskKeyStore,'--ks-key-alias','xiaohe','--ks-pass','env:XIAOHE_BUILD_SECRET','--key-pass','env:XIAOHE_BUILD_SECRET','--v4-signing-enabled','false','--out',$taskApk,(Join-Path $taskBuild 'aligned.apk'))
   Invoke-TaskTool (Join-Path $taskJavaDir 'java.exe') @('-jar',$taskSigner,'verify','--verbose','--print-certs',$taskApk)
   Invoke-TaskTool $taskAapt @('dump','badging',$taskApk)

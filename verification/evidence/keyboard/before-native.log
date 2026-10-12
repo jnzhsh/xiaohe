@@ -1,0 +1,3 @@
+INSTRUMENTATION_RESULT: error=java.lang.AssertionError: Chat input and send button must be above actual IME: {"dom":{"innerHeight":732,"innerWidth":412,"input":{"bottom":572.6190795898438,"top":514.6190795898438},"send":{"bottom":622.0000343322754,"top":577.6190795898438},"visualHeight":732.1904907226562},"native":{"webTop":0,"webHeight":1920,"webWidth":1080,"windowBottom":1920,"imeHeight":775,"imeShown":true,"safeBottom":1145},"inputScreenBottom":1501.0403057209498,"sendScreenBottom":1630.4855268904307}
+INSTRUMENTATION_RESULT: status=failed
+INSTRUMENTATION_CODE: 0

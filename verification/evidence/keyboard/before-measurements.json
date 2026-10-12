@@ -1,0 +1,93 @@
+{
+  "phase": "before",
+  "closed": {
+    "innerHeight": 732,
+    "innerWidth": 412,
+    "devicePixelRatio": 2.625,
+    "visualHeight": 732.1904907226562,
+    "visualTop": 0,
+    "visualScale": 1,
+    "vh": "732px",
+    "scrollY": 0,
+    "focused": "",
+    "app": {
+      "top": 0,
+      "bottom": 732,
+      "left": 0,
+      "right": 412.19049072265625,
+      "width": 412.19049072265625,
+      "height": 732
+    },
+    "composer": {
+      "top": 493.6190490722656,
+      "bottom": 670,
+      "left": 0,
+      "right": 412.19049072265625,
+      "width": 412.19049072265625,
+      "height": 176.38095092773438
+    },
+    "input": {
+      "top": 514.6190795898438,
+      "bottom": 572.6190795898438,
+      "left": 33,
+      "right": 379.19049072265625,
+      "width": 346.19049072265625,
+      "height": 58
+    },
+    "send": {
+      "top": 577.6190795898438,
+      "bottom": 622.0000343322754,
+      "left": 321.1845397949219,
+      "right": 379.1904945373535,
+      "width": 58.00595474243164,
+      "height": 44.38095474243164
+    },
+    "imeInsets": [],
+    "imeShown": false
+  },
+  "opened": {
+    "innerHeight": 732,
+    "innerWidth": 412,
+    "devicePixelRatio": 2.625,
+    "visualHeight": 732.1904907226562,
+    "visualTop": 0,
+    "visualScale": 1,
+    "vh": "732px",
+    "scrollY": 0,
+    "focused": "message-input",
+    "app": {
+      "top": 0,
+      "bottom": 732,
+      "left": 0,
+      "right": 412.19049072265625,
+      "width": 412.19049072265625,
+      "height": 732
+    },
+    "composer": {
+      "top": 493.6190490722656,
+      "bottom": 670,
+      "left": 0,
+      "right": 412.19049072265625,
+      "width": 412.19049072265625,
+      "height": 176.38095092773438
+    },
+    "input": {
+      "top": 514.6190795898438,
+      "bottom": 572.6190795898438,
+      "left": 33,
+      "right": 379.19049072265625,
+      "width": 346.19049072265625,
+      "height": 58
+    },
+    "send": {
+      "top": 577.6190795898438,
+      "bottom": 622.0000343322754,
+      "left": 321.1845397949219,
+      "right": 379.1904945373535,
+      "width": 58.00595474243164,
+      "height": 44.38095474243164
+    },
+    "imeInsets": [],
+    "imeShown": true
+  }
+}

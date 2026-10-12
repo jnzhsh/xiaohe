@@ -175,6 +175,24 @@ async function careAction(b,context){
 }
 
 window.App={back(){const open=$$('dialog[open]');if(open.length){closeSheet(open[open.length-1].id);return true;}if(state.view!=='chat'){changeView('chat');return true;}return false;}};
-function resize(){document.documentElement.style.setProperty('--vh',innerHeight+'px');}window.addEventListener('resize',resize);resize();initIcons();
+function resize(){
+ const viewport=window.visualViewport;
+ const height=Math.max(1,Math.floor(Math.min(innerHeight,viewport&&Math.abs(viewport.scale-1)<.02?viewport.height:innerHeight)));
+ document.documentElement.style.setProperty('--vh',height+'px');
+ document.documentElement.classList.toggle('viewport-compact',height<480);
+ document.documentElement.classList.toggle('viewport-short',height<300);
+ requestAnimationFrame(()=>{
+  const field=document.activeElement,body=field?.closest('.sheet-body');
+  if(!body||!field.matches('input:not([type=checkbox]),textarea'))return;
+  const area=body.getBoundingClientRect(),rect=field.getBoundingClientRect(),top=Math.max(0,area.top)+10,bottom=Math.min(height,area.bottom)-10;
+  if(rect.bottom>bottom)body.scrollTop+=rect.bottom-bottom;
+  else if(rect.top<top)body.scrollTop-=top-rect.top;
+ });
+}
+window.addEventListener('resize',resize);
+window.visualViewport?.addEventListener('resize',resize);
+window.visualViewport?.addEventListener('scroll',resize);
+document.addEventListener('focusin',()=>requestAnimationFrame(resize));
+resize();initIcons();
 try{$('#message-input').value=localStorage.getItem('xiaohe-draft')||'';}catch(_){}
 refresh().catch(error=>{progress(error.message);$('#chat-log').innerHTML='<div class="welcome"><h1>我在，慢慢说。</h1><p>正在打开本机记忆，请稍后再试。</p></div>';});
