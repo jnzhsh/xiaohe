@@ -10,3 +10,8 @@
 
 .entity-choice{max-width:100%;white-space:normal;overflow-wrap:anywhere}.history-row strong{overflow-wrap:anywhere}.sheet-body label{display:block;margin-top:13px;font-size:.875rem}.sheet-body label input{margin-top:5px}.detail-source>button{max-width:100%;white-space:normal;overflow-wrap:anywhere;margin:5px 6px 5px 0}
 .paste-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.field-paste{min-width:54px;min-height:38px;border:0;border-radius:10px;background:var(--tint);color:var(--accent);font-size:.8125rem;padding:6px 12px}.paste-heading+input{margin-top:3px!important}.composer-tools>div{display:flex;align-items:center;flex-wrap:wrap;gap:2px}
+
+/* Keep editing and sending available when the keyboard leaves a short viewport. */
+html,body{height:100%;overflow:hidden}
+.viewport-short .bottom-nav{display:none}.viewport-compact .app-header{padding-top:8px;padding-bottom:8px}.viewport-compact #composer-wrap{padding-top:4px;padding-bottom:4px}.viewport-compact .composer{padding:8px 12px}
+.viewport-short .app-header,.viewport-short #progress{display:none}.viewport-short .sheet{max-height:calc(var(--vh) - 8px)}.viewport-short .sheet-header{padding:4px 12px}.viewport-short .sheet-body{padding:8px 14px;max-height:calc(var(--vh) - 64px)}.viewport-short .editor{min-height:70px;max-height:calc(var(--vh) - 120px)}

@@ -1,5 +1,6 @@
 小禾 1.2.1 初始候选：交付与续接记录
 维护位置：本仓库 DELIVERY.txt；同版本 Release 保存制品与验证读回结果。
+本文保留首次上传 1.2.1 的历史。后续 1.2.2 键盘修复的当前状态与证据以 https://github.com/jnzhsh/xiaohe/issues/1 为权威记录。
 
 目标与授权
 2026-10-12 用户要求上传 https://github.com/jnzhsh/xiaohe，并明确指定“以现有 1.2.1 作为初始版本”。

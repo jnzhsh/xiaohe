@@ -6,12 +6,14 @@ import android.content.*;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.*;
 import android.speech.*;
 import android.view.*;
 import android.webkit.*;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 import org.json.*;
 import java.io.*;
@@ -24,10 +26,24 @@ public final class MainActivity extends Activity {
   private boolean ready=false,waitingVoice=false,notificationRequested=false;private JSONArray sharedFiles=new JSONArray();private String sharedText="";
   private MediaRecorder recorder;private File recording;private SpeechRecognizer recognizer;private String pickerRequest,exportRequest,importRequest;
   private static final int PICK=10,EXPORT=11,IMPORT=12,MIC=13,NOTIFY=14;
-  @Override public void onCreate(Bundle saved){super.onCreate(saved);store=Store.get(this);Scheduler.init(this);if((getApplicationInfo().flags&android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0)WebView.setWebContentsDebuggingEnabled(true);web=new ClipboardWebView(this);web.setBackgroundColor(Color.rgb(255,249,241));setContentView(web);
-    if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
-    web.setOnApplyWindowInsetsListener((v,insets)->{int top=insets.getSystemWindowInsetTop(),bottom=insets.getSystemWindowInsetBottom();v.setPadding(0,top,0,bottom);return insets;});
-    getWindow().setStatusBarColor(Color.rgb(255,249,241));getWindow().setNavigationBarColor(Color.rgb(255,249,241));getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|(Build.VERSION.SDK_INT>=26?View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0));
+  @Override public void onCreate(Bundle saved){super.onCreate(saved);store=Store.get(this);Scheduler.init(this);if((getApplicationInfo().flags&android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0)WebView.setWebContentsDebuggingEnabled(true);web=new ClipboardWebView(this);web.setBackgroundColor(Color.rgb(255,249,241));
+    FrameLayout content=new FrameLayout(this);content.setBackgroundColor(Color.rgb(255,249,241));
+    content.addView(web,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
+    if(Build.VERSION.SDK_INT>=30){
+      getWindow().setDecorFitsSystemWindows(false);
+      content.setOnApplyWindowInsetsListener((v,insets)->{
+        int bars=WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout();
+        int handled=bars|WindowInsets.Type.ime();
+        Insets space=insets.getInsets(handled);
+        // Padding the container changes WebView's measured viewport, including on older WebViews.
+        v.setPadding(space.left,space.top,space.right,space.bottom);
+        // Pass zeroed insets onward so newer WebViews do not reserve the same space again.
+        return new WindowInsets.Builder(insets).setInsets(handled,Insets.NONE).setInsetsIgnoringVisibility(bars,Insets.NONE).build();
+      });
+    }
+    // API 26-29 uses the window's existing adjustResize and system-bar fitting.
+    setContentView(content);content.post(content::requestApplyInsets);
+    getWindow().setStatusBarColor(Color.rgb(255,249,241));getWindow().setNavigationBarColor(Color.rgb(255,249,241));View decor=getWindow().getDecorView();decor.setSystemUiVisibility(decor.getSystemUiVisibility()|View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|(Build.VERSION.SDK_INT>=26?View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0));
     WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setJavaScriptCanOpenWindowsAutomatically(false);s.setSupportMultipleWindows(false);web.addJavascriptInterface(new Bridge(),"XiaoheAndroid");
     web.setWebViewClient(new WebViewClient(){
       @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest req){return resource(req.getUrl());}
@@ -36,6 +52,7 @@ public final class MainActivity extends Activity {
     });
     web.loadUrl("https://xiaohe.local/index.html");receive(getIntent());
   }
+  @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);getWindow().getDecorView().requestApplyInsets();}
   private WebResourceResponse resource(Uri uri){if(!"xiaohe.local".equals(uri.getHost()))return new WebResourceResponse("text/plain","UTF-8",403,"Blocked",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
     try{String path=uri.getPath();if(path==null||path.equals("/"))path="/index.html";InputStream stream;String mime;
       if(path.startsWith("/media/")){String id=path.substring(7);JSONObject f=store.one("files",id);if(f==null)throw new IOException();mime=f.optString("mime","application/octet-stream");stream=new FileInputStream(store.filePath(id));}

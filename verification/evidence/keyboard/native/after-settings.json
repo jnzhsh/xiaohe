@@ -1,0 +1,26 @@
+{
+  "dom": {
+    "innerHeight": 453,
+    "innerWidth": 412,
+    "input": {
+      "bottom": 413.47621154785156,
+      "top": 361.66668701171875
+    },
+    "send": {
+      "bottom": 349.00000381469727,
+      "top": 304.6190490722656
+    },
+    "visualHeight": 453.3333435058594
+  },
+  "native": {
+    "webTop": 63,
+    "webHeight": 1187,
+    "webWidth": 1080,
+    "windowBottom": 1920,
+    "imeHeight": 670,
+    "imeShown": true,
+    "safeBottom": 1250
+  },
+  "inputScreenBottom": 1146.869680756504,
+  "sendScreenBottom": 977.8543789317307
+}
