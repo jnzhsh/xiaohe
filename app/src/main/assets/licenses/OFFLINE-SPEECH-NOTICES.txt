@@ -1,0 +1,21 @@
+小禾离线中文语音
+
+sherpa-onnx 1.13.8
+https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.8
+Apache-2.0: SHERPA-LICENSE.txt
+
+Chinese Zipformer14M (WenetSpeech), 2023-02-23
+https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23
+发布方声明 Apache-2.0，独立于 SDK 许可证: MODEL-README.txt, MODEL-APACHE-2.0.txt
+使用量化 encoder、量化 joiner、FP32 decoder；仅承诺普通话试用，识别结果请校对。
+
+Kotlin standard library 1.7.20
+https://github.com/JetBrains/kotlin/tree/v1.7.20
+Apache-2.0: KOTLIN-LICENSE.txt
+
+ONNX Runtime (SDK 内嵌)
+https://github.com/microsoft/onnxruntime
+MIT: ONNXRUNTIME-LICENSE.txt
+
+构建依赖及模型来源与 SHA-256：仓库 asr-dependencies.json
+安装后语音模型无需下载。本机麦克风语音没有云端失败回退。

@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app.xiaohe.assistant" android:versionCode="5" android:versionName="1.2.2">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app.xiaohe.assistant" android:versionCode="6" android:versionName="1.3.0">
   <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -6,8 +6,7 @@
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
   <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
   <uses-feature android:name="android.hardware.microphone" android:required="false" />
-  <queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>
-  <application android:label="小禾" android:icon="@drawable/ic_xiaohe" android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="true" android:supportsRtl="true">
+  <application android:label="小禾" android:icon="@drawable/ic_xiaohe" android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="true" android:supportsRtl="true" android:extractNativeLibs="true">
     <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize">
       <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
       <intent-filter><action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="*/*" /></intent-filter>

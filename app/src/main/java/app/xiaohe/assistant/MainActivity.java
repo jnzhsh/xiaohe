@@ -7,10 +7,8 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Insets;
-import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.*;
-import android.speech.*;
 import android.view.*;
 import android.webkit.*;
 import android.widget.FrameLayout;
@@ -24,7 +22,7 @@ import java.util.regex.*;
 public final class MainActivity extends Activity {
   private WebView web;private Store store;private final ExecutorService io=Executors.newSingleThreadExecutor();
   private boolean ready=false,waitingVoice=false,notificationRequested=false;private JSONArray sharedFiles=new JSONArray();private String sharedText="";
-  private MediaRecorder recorder;private File recording;private SpeechRecognizer recognizer;private String pickerRequest,exportRequest,importRequest;
+  private OfflineSpeech speech;private boolean foreground;private String pickerRequest,exportRequest,importRequest;
   private static final int PICK=10,EXPORT=11,IMPORT=12,MIC=13,NOTIFY=14;
   @Override public void onCreate(Bundle saved){super.onCreate(saved);store=Store.get(this);Scheduler.init(this);if((getApplicationInfo().flags&android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0)WebView.setWebContentsDebuggingEnabled(true);web=new ClipboardWebView(this);web.setBackgroundColor(Color.rgb(255,249,241));
     FrameLayout content=new FrameLayout(this);content.setBackgroundColor(Color.rgb(255,249,241));
@@ -72,7 +70,7 @@ public final class MainActivity extends Activity {
       case "bootstrap":store.archive(false);JSONObject boot=store.bootstrap();boot.put("notifications",canNotify());boot.put("exactAlarms",Build.VERSION.SDK_INT<31||getSystemService(AlarmManager.class).canScheduleExactAlarms());if(getIntent().hasExtra("memoryId")){boot.put("openMemoryId",getIntent().getStringExtra("memoryId"));getIntent().removeExtra("memoryId");}return boot;
       case "saveSettings":new Settings(this).save(args);return new Settings(this).publicValues();
       case "testConnection":return new AiEngine(this).test();
-      case "stageMessage":{String id=args.optString("id",UUID.randomUUID().toString());if(!id.matches("[a-zA-Z0-9_-]{8,80}"))throw new Exception("无效消息编号");JSONArray files=args.optJSONArray("files");if(files==null)files=new JSONArray();for(int i=0;i<files.length();i++)if(store.one("files",files.getString(i))==null)throw new Exception("附件不存在");return store.message("user",args.optString("text"),files,id);}
+      case "stageMessage":{String id=args.optString("id",UUID.randomUUID().toString());if(!id.matches("[a-zA-Z0-9_-]{8,80}"))throw new Exception("无效消息编号");JSONArray files=args.optJSONArray("files");if(files==null)files=new JSONArray();for(int i=0;i<files.length();i++)if(store.one("files",files.getString(i))==null)throw new Exception("附件不存在");return stageMessage(args,files,id);}
       case "prepareMedia":return new MediaProcessor(this).prepare(args.getJSONArray("files"));
       case "saveOcr":{JSONObject f=store.one("files",args.getString("id"));if(f==null)throw new Exception("附件不存在");String text=args.optString("text");f.put("ocrText",text);f.put("processingNote",f.optString("processingNote").replaceAll("；本机OCR.*$","")+(text.isEmpty()?"；本机OCR未识别到可读文字":"；本机OCR完成，识别文字仍可能有误"));store.put("files",f);return f;}
       case "processMessage":return process(args);
@@ -97,7 +95,7 @@ public final class MainActivity extends Activity {
   private JSONObject process(JSONObject args)throws Exception {
     JSONObject m=store.one("messages",args.getString("id"));if(m==null||!m.optString("role").equals("user"))throw new Exception("消息不存在");
     if(m.optBoolean("processed"))return store.bootstrap();
-    JSONArray files=m.optJSONArray("files");if(files!=null)for(int i=0;i<files.length();i++){JSONObject f=store.one("files",files.getString(i));if(f!=null&&f.optBoolean("recorded")&&!f.optString("text").isEmpty()){m.put("voiceText",f.getString("text")).put("recordedVoiceVerified",true);if(m.optString("content").isEmpty())m.put("content",f.getString("text"));}}
+    JSONArray files=m.optJSONArray("files");if(files!=null)for(int i=0;i<files.length();i++){JSONObject f=store.one("files",files.getString(i));if(f!=null&&f.optBoolean("recorded")&&!f.optBoolean("localVoice")&&!f.optString("text").isEmpty()){m.put("voiceText",f.getString("text")).put("recordedVoiceVerified",true);if(m.optString("content").isEmpty())m.put("content",f.getString("text"));}}
     Matcher matcher=Pattern.compile("https?://[^\\s<>\"，。；]+",Pattern.CASE_INSENSITIVE).matcher(m.optString("content"));if(matcher.find()&&!m.has("linkText")){event("progress",new JSONObject().put("text","我在看看链接里能读到的内容…"));try{m.put("linkText",MediaProcessor.fetchLink(matcher.group()));m.put("linkNote","已读取无需登录的网页文字，脚本生成的内容可能未包含");}catch(Exception e){m.put("linkNote","原链接已保留，网页未能读取："+friendly(e));}store.put("messages",m);}
     event("progress",new JSONObject().put("text","我在把这些事整理好…"));
     try{JSONObject ai=new AiEngine(this).process(m,args.optJSONArray("frames"));String replyText=ai.getString("reply");JSONArray eligible=ai.optJSONArray("reminderEligibleIds"),schedules=new JSONArray();if(eligible!=null)for(int i=0;i<eligible.length();i++){JSONObject r=store.one("memories",eligible.getString(i));if(r==null)continue;JSONObject schedule=Scheduler.schedule(this,r);r.put("reminderSchedule",schedule).put("changeReason","手机记录提醒的实际排程结果");store.put("memories",r);schedules.put(schedule);if(schedule.optString("state").equals("scheduled"))requestNotificationPermission();}
@@ -123,7 +121,13 @@ public final class MainActivity extends Activity {
       case "pickFiles":pickerRequest=request;startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true),PICK);break;
       case "export":exportRequest=request;startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip").putExtra(Intent.EXTRA_TITLE,"小禾备份-"+new java.text.SimpleDateFormat("yyyyMMdd-HHmm",Locale.ROOT).format(new Date())+".xiaohe.zip"),EXPORT);break;
       case "import":importRequest=request;startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"),IMPORT);break;
-      case "voice":if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){waitingVoice=true;requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},MIC);}else toggleVoice();result(request,new JSONObject().put("ok",true),null);break;
+      case "voice":{
+        String action=a.optString("action","toggle");
+        if(action.equals("cancel")){waitingVoice=false;if(speech!=null&&speech.isActive())speech.cancel();else event("voiceState",new JSONObject().put("state","stopped"));}
+        else if(action.equals("stop")||(action.equals("toggle")&&speech!=null&&speech.isActive())){if(speech!=null&&speech.isActive())speech.stop();else event("voiceState",jsonState("stopped"));}
+        else if(!waitingVoice){if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){waitingVoice=true;event("voiceState",new JSONObject().put("state","permission"));requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},MIC);}else startVoice();}
+        result(request,new JSONObject().put("ok",true),null);break;
+      }
       case "openFile":{JSONObject f=store.one("files",a.getString("id"));if(f==null)throw new Exception("附件不存在");Intent open=new Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse("content://app.xiaohe.assistant.files/"+f.getString("id")),f.optString("mime","application/octet-stream")).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(Intent.createChooser(open,"打开原件"));result(request,new JSONObject().put("ok",true),null);break;}
       case "openUrl":openUrl(a.getString("url"));result(request,new JSONObject().put("ok",true),null);break;
       case "reminder":pickReminder(a.getString("id"),request);break;
@@ -138,19 +142,37 @@ public final class MainActivity extends Activity {
   private void receive(Intent intent){if(intent==null)return;String action=intent.getAction();if(Intent.ACTION_SEND.equals(action)||Intent.ACTION_SEND_MULTIPLE.equals(action)){CharSequence text=intent.getCharSequenceExtra(Intent.EXTRA_TEXT);sharedText=text==null?"":text.toString();List<Uri> uris=new ArrayList<>();if(Intent.ACTION_SEND_MULTIPLE.equals(action)){ArrayList<Uri> list=intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);if(list!=null)uris.addAll(list);}else{Uri uri=intent.getParcelableExtra(Intent.EXTRA_STREAM);if(uri!=null)uris.add(uri);}io.execute(()->{try{for(Uri uri:uris)sharedFiles.put(new MediaProcessor(this).copy(uri));runOnUiThread(this::deliverShared);}catch(Exception e){event("error",jsonText(friendly(e)));}});}else if(intent.hasExtra("memoryId"))sharedText="";}
   @Override public void onNewIntent(Intent i){super.onNewIntent(i);setIntent(i);receive(i);}
   private void deliverShared(){if(!ready||(sharedText.isEmpty()&&sharedFiles.length()==0))return;try{event("shared",new JSONObject().put("text",sharedText).put("files",sharedFiles));sharedText="";sharedFiles=new JSONArray();}catch(Exception ignored){}}
-  private void toggleVoice()throws Exception {
-    if(recorder!=null){try{recorder.stop();}catch(RuntimeException e){if(recording!=null)recording.delete();throw new Exception("这段录音还太短，可以再说一次。");}finally{recorder.release();recorder=null;event("voiceState",jsonText("stopped"));}File done=recording;io.execute(()->{try{JSONObject f=new MediaProcessor(this).recorded(done);f.put("recorded",true);store.put("files",f);event("shared",new JSONObject().put("text","").put("files",new JSONArray().put(f)));}catch(Exception e){event("error",jsonText(friendly(e)));}});return;}
-    if(recognizer!=null){recognizer.stopListening();return;}
-    if(new Settings(this).get("asrUrl","").isEmpty()&&Build.VERSION.SDK_INT>=31&&SpeechRecognizer.isOnDeviceRecognitionAvailable(this)){recognizer=SpeechRecognizer.createOnDeviceSpeechRecognizer(this);recognizer.setRecognitionListener(new RecognitionListener(){
-      public void onReadyForSpeech(Bundle b){event("voiceState",jsonText("listening"));}public void onBeginningOfSpeech(){}public void onRmsChanged(float f){}public void onBufferReceived(byte[] b){}public void onEndOfSpeech(){}
-      public void onError(int e){stopRecognizer();event("error",jsonText("这次本机没有识别到语音。可以再试一次，或连接独立转写接口后录音。"));}
-      public void onResults(Bundle b){ArrayList<String> rs=b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);if(rs!=null&&!rs.isEmpty())event("voiceText",jsonText(rs.get(0)));stopRecognizer();}
-      public void onPartialResults(Bundle b){}public void onEvent(int t,Bundle b){}
-    });Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(RecognizerIntent.EXTRA_LANGUAGE,"zh-CN").putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,true);recognizer.startListening(i);}
-    else{recording=File.createTempFile("voice-",".m4a",getCacheDir());recorder=new MediaRecorder();try{recorder.setAudioSource(MediaRecorder.AudioSource.MIC);recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);recorder.setAudioSamplingRate(16000);recorder.setAudioEncodingBitRate(48000);recorder.setOutputFile(recording.getAbsolutePath());recorder.prepare();recorder.start();event("voiceState",jsonText("recording"));}catch(Exception e){recorder.release();recorder=null;recording.delete();event("voiceState",jsonText("stopped"));throw new Exception("这次没有开始录音，请检查麦克风权限后再试。");}}
+  private JSONObject stageMessage(JSONObject args,JSONArray files,String id)throws Exception {
+    if(!args.has("capturedAt")&&!args.has("capturedZone")&&!args.has("anchorFileId"))return store.message("user",args.optString("text"),files,id);
+    long at=args.getLong("capturedAt");String zone=args.getString("capturedZone"),fileId=args.getString("anchorFileId");
+    JSONObject anchorFile=store.one("files",fileId);
+    if(at<=0||anchorFile==null||!anchorFile.optBoolean("localVoice")||anchorFile.optLong("capturedAt")!=at||!anchorFile.optString("capturedZone").equals(zone))throw new Exception("这段语音的原始时间暂时没找到，可以先清空草稿再输入。");
+    try{java.time.ZoneId.of(zone);java.time.Instant.ofEpochMilli(at);}catch(Exception e){throw new Exception("这段语音的时间信息不完整。");}
+    return store.message("user",args.optString("text"),files,id,at,zone);
   }
-  private void stopRecognizer(){if(recognizer!=null){recognizer.destroy();recognizer=null;}event("voiceState",jsonText("stopped"));}
-  @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] grant){super.onRequestPermissionsResult(code,permissions,grant);if(code==MIC&&waitingVoice){waitingVoice=false;if(grant.length>0&&grant[0]==PackageManager.PERMISSION_GRANTED)try{toggleVoice();}catch(Exception e){event("error",jsonText(friendly(e)));}else event("error",jsonText("录音权限没有开启，仍然可以输入文字或添加已有素材。"));}if(code==NOTIFY&&grant.length>0&&grant[0]==PackageManager.PERMISSION_GRANTED)io.execute(()->{try{Scheduler.reschedule(this);}catch(Exception ignored){}});}
+  private void startVoice(){
+    if(isFinishing()||isDestroyed())return;if(!foreground){event("voiceState",jsonState("stopped"));return;}
+    android.view.inputmethod.InputMethodManager keyboard=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+    if(keyboard!=null)keyboard.hideSoftInputFromWindow(web.getWindowToken(),0);
+    if(speech==null)speech=new OfflineSpeech(this,new OfflineSpeech.Listener(){
+      public void onState(JSONObject state){event("voiceState",state);}
+      public void onPartial(JSONObject text){event("voicePartial",text);}
+      public void onResult(JSONObject value){event("voiceResult",value);}
+      public void onError(String message){event("error",jsonText(message));}
+    });
+    speech.start();
+  }
+  @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] grant){
+    super.onRequestPermissionsResult(code,permissions,grant);
+    if(code==MIC&&waitingVoice){waitingVoice=false;
+      if(grant.length>0&&grant[0]==PackageManager.PERMISSION_GRANTED)web.post(this::startVoice);
+      else {event("voiceState",jsonState("stopped"));event("error",jsonText("录音权限没有开启，仍然可以输入文字或添加已有素材。"));}
+    }
+    if(code==NOTIFY&&grant.length>0&&grant[0]==PackageManager.PERMISSION_GRANTED)io.execute(()->{try{Scheduler.reschedule(this);}catch(Exception ignored){}});
+  }
+  private static JSONObject jsonState(String state){try{return new JSONObject().put("state",state);}catch(Exception e){return new JSONObject();}}
+  @Override protected void onResume(){super.onResume();foreground=true;}
+  @Override protected void onPause(){foreground=false;if(speech!=null&&speech.isActive())speech.cancel();super.onPause();}
   private void requestNotificationPermission(){if(Build.VERSION.SDK_INT>=33&&!canNotify()&&!notificationRequested){notificationRequested=true;runOnUiThread(()->requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},NOTIFY));}}
   private boolean canNotify(){return Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;}
   private void pickReminder(String id,String request)throws Exception {
@@ -165,5 +187,5 @@ public final class MainActivity extends Activity {
   private static JSONObject jsonText(String text){try{return new JSONObject().put("text",text);}catch(Exception e){return new JSONObject();}}
   private String friendly(Exception e){String message=e.getMessage()==null?"这次没有完成，原始内容仍保存在手机里":e.getMessage();try{Settings settings=new Settings(this);for(String name:new String[]{"apiKey","asrKey"}){String secret=settings.secret(name);if(!secret.isEmpty())message=message.replace(secret,"[密钥已隐藏]");}}catch(Exception ignored){}return Store.shorten(message,260);}
   @Override public void onBackPressed(){if(!ready){super.onBackPressed();return;}web.evaluateJavascript("window.App?window.App.back():false",value->{if(!"true".equals(value))MainActivity.super.onBackPressed();});}
-  @Override public void onDestroy(){if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}recorder.release();}if(recognizer!=null)recognizer.destroy();io.shutdown();if(web!=null){web.removeJavascriptInterface("XiaoheAndroid");web.destroy();}super.onDestroy();}
+  @Override public void onDestroy(){waitingVoice=false;if(speech!=null)speech.close();io.shutdown();if(web!=null){web.removeJavascriptInterface("XiaoheAndroid");web.destroy();}super.onDestroy();}
 }
