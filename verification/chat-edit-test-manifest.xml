@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app.xiaohe.assistant.chatedittests" android:versionCode="1" android:versionName="1.0">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+  <application android:label="小禾聊天修改回归" android:debuggable="true" />
+  <instrumentation android:name="app.xiaohe.tests.ChatEditTest" android:targetPackage="app.xiaohe.assistant" />
+</manifest>

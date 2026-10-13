@@ -1,0 +1,17 @@
+/* The selected record stays separate from what the user says in the draft. */
+#chat-edit-context{border:1px solid var(--line);border-radius:14px;background:var(--tint);padding:8px 10px;margin-bottom:8px}
+#chat-edit-context .chat-edit-heading{display:flex;align-items:center;gap:8px;min-width:0}
+#chat-edit-context .chat-edit-record{flex:1;min-width:0}
+#chat-edit-label{display:block;font-size:.6875rem;color:var(--muted);line-height:1.45}
+#chat-edit-title{display:block;font-size:.8125rem;font-weight:500;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#chat-edit-summary{font-size:.75rem;color:var(--muted);line-height:1.55;margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;max-height:2.9em;overflow:auto}
+#chat-edit-status{font-size:.6875rem;color:var(--accent);line-height:1.5;margin:5px 0 0;overflow-wrap:anywhere}
+#chat-edit-remove,#chat-edit-refresh{flex-shrink:0;min-height:36px;padding:4px 6px;font-size:.75rem}
+#chat-edit-remove{min-width:36px;border:0;background:transparent;color:var(--muted);border-radius:10px;font-size:1.15rem}
+.viewport-compact #chat-edit-context{padding:5px 8px;margin-bottom:5px}
+.viewport-compact #chat-edit-summary{display:none}
+.viewport-short #chat-edit-context{padding:3px 7px;margin-bottom:4px}
+.viewport-short #chat-edit-label,.viewport-short #chat-edit-status{display:none}
+.viewport-short #chat-edit-title{font-size:.75rem}
+.viewport-short #chat-edit-remove,.viewport-short #chat-edit-refresh{min-height:28px;height:28px;padding:2px 4px}
+.viewport-short.chat-editing #message-input{min-height:28px;max-height:40px}
