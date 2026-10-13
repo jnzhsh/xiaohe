@@ -21,7 +21,7 @@ tasks.register('prepareGradleManifest') {
 android {
   namespace 'app.xiaohe.assistant'
   compileSdk 35
-  defaultConfig { applicationId 'app.xiaohe.assistant'; minSdk 26; targetSdk 35; versionCode 9; versionName '1.6.0' }
+  defaultConfig { applicationId 'app.xiaohe.assistant'; minSdk 26; targetSdk 35; versionCode 10; versionName '1.6.1' }
   compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
   buildTypes { release { minifyEnabled false } }
   sourceSets { main { manifest.srcFile generatedManifest.get().asFile; assets.srcDir asrAssets } }

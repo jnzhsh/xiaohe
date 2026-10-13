@@ -7,7 +7,9 @@ import java.util.regex.*;
 /** Bounded, read-only recall. Neither a prompt projection nor a context reference rewrites a record. */
 public final class MemoryRecall {
   private static final int ROW_LIMIT=30,CHAR_BUDGET=60000,POOL_LIMIT=60;
-  private static final Pattern POINTER=Pattern.compile("他们|她们|它们|(?<!其)他|她|对方|那位|那家|那件|那次|那条|这个|这些|这件|这条|我的|我们的|我家|我之前|我以前|我上次|我给|我收到|记忆|记过|记录里|收藏过|还记得|(?:我|我们).{0,4}(?:有哪些|有过|存了|记了|收藏|记录|保存)");
+  private static final Pattern POINTER=Pattern.compile("他们|她们|它们|(?<!其)他|她|对方|那位|那家|那件|那次|那条|这个|这些|这件|这条|我的|我们的|我家|我之前|我以前|我上次|我给|我收到|记忆|记过|记录里|收藏过|还记得|(?:我|我们).{0,4}(?:有哪些|有过|存了|记了|收藏|记录|保存)"
+    +"|(?:其他|其余|剩下|剩余)(?:的)?(?:(?:[几一二两三四五六七八九十0-9]+)?(?:个|位|名)?(?:人|朋友|同事|同学)|[几一二两三四五六七八九十0-9]+(?:位|名)|(?=呢|分别|各自|多少|[？?。！!\\s]*$))"
+    +"|另外(?:的)?(?:(?:[几一二两三四五六七八九十0-9]+)?(?:个|位|名)?(?:人|朋友|同事|同学)|[几一二两三四五六七八九十0-9]+(?:位|名))|另一位");
   private static final Pattern PERSONAL_ACTION=Pattern.compile("(?:我|我们).{0,3}(?:订|买|寄|给|收|花|存|借|欠)|(?:我|我们)当时");
   private static final Pattern CONTINUATION=Pattern.compile("^(?:那|那么|这样|然后|还有|再|你觉得|你认为|你建议)|上次|上一次|之前|对方|他们|她们|那件|这件|这条|那个|这个");
   private static final Pattern NEW_KNOWLEDGE=Pattern.compile("^\\s*(?:我想知道|我想了解|请解释|解释一下|什么是|介绍一下|讲讲)");
