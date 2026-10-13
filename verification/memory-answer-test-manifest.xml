@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app.xiaohe.assistant.memoryanswertests" android:versionCode="1" android:versionName="1.0">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+  <application android:label="小禾已记信息问答回归" android:debuggable="true" />
+  <instrumentation android:name="app.xiaohe.tests.MemoryAnswerTest" android:targetPackage="app.xiaohe.assistant" />
+</manifest>
