@@ -50,7 +50,7 @@ public final class MemoryAnswer {
         if(row==null||quote.isEmpty()||quote.codePointCount(0,quote.length())>4000||!quoteIn(row,quote)){invalid=true;continue;}
         evidence.add(id);if(factKeys.add(id+"\n"+quote))verifiedFacts.put(new JSONObject().put("id",id).put("quote",quote));
       }
-      if(invalid)return fallbackLocked(source,rows,coverage,"这次回答的依据还没核对上，我先找本机已有的资料。");
+      if(invalid){Rows fallback=rows;if(!evidence.isEmpty()){fallback=new Rows();fallback.changed=rows.changed;for(String id:evidence)fallback.values.put(id,rows.values.get(id));}return fallbackLocked(source,fallback,coverage,"这次回答的依据还没核对上，我先找本机已有的资料。");}
       String answer=clean(proposed.getString("reply"),rows.values.values());
       if(rows.values.isEmpty()){
         if(personal||answer.isEmpty()||claimsPersonalMemory(answer))return fallbackLocked(source,rows,coverage,"当前没找到可核对的个人记录。");
