@@ -3,7 +3,7 @@ param(
   [Parameter(Mandatory=$true)][string]$AppClasses,
   [string[]]$Dependencies=@(),
   [string]$Device='emulator-5556',
-  [ValidateSet('baseline','native','context','ui')][string]$Mode='native',
+  [ValidateSet('baseline','native','context','ui','dates')][string]$Mode='native',
   [switch]$BuildOnly
 )
 $ErrorActionPreference='Stop'
@@ -19,6 +19,7 @@ foreach($taskDirectory in @($taskBuild,(Join-Path $taskBuild 'classes'),(Join-Pa
 function Invoke-MemoryAnswerTool([string]$Program,[string[]]$ToolArgs){& $Program @ToolArgs;if($LASTEXITCODE -ne 0){throw "Memory-answer tool failed: $Program"}}
 Invoke-MemoryAnswerTool $taskAapt @('link','-o',(Join-Path $taskBuild 'resources.apk'),'-I',$taskPlatform,'--manifest',(Join-Path $PSScriptRoot 'memory-answer-test-manifest.xml'),'--min-sdk-version','26')
 $taskSources=@('VoiceSupport.java','MemoryAnswerSupport.java','MemoryAnswerTest.java','MemoryAnswerBaselineSmoke.java','MemoryAnswerNativeSmoke.java','MemoryAnswerUiSmoke.java') | ForEach-Object {Join-Path $PSScriptRoot ('app/xiaohe/tests/'+$_)}
+$taskSources+=Join-Path $PSScriptRoot 'ScheduleApiSmoke.java'
 $taskClasspath=(@($taskPlatform,$AppClasses)+$Dependencies) -join ';'
 Invoke-MemoryAnswerTool (Join-Path $taskJava 'javac.exe') (@('--release','8','-encoding','UTF-8','-classpath',$taskClasspath,'-d',(Join-Path $taskBuild 'classes'))+$taskSources)
 Invoke-MemoryAnswerTool (Join-Path $taskJava 'jar.exe') @('--create','--file',(Join-Path $taskBuild 'classes.jar'),'-C',(Join-Path $taskBuild 'classes'),'.')
