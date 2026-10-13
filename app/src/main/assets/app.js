@@ -249,6 +249,7 @@ window.addEventListener('resize',resize);
 window.visualViewport?.addEventListener('resize',resize);
 window.visualViewport?.addEventListener('scroll',resize);
 document.addEventListener('focusin',()=>requestAnimationFrame(resize));
+window.XiaoheFeedback.create({call,toast,openSheet,closeSheet,openSettings:()=>showSettings(),beforeOpen:async()=>{if(voiceActive())await cancelVoice();}});
 resize();initIcons();
 try{
  $('#message-input').value=localStorage.getItem('xiaohe-draft')||'';
