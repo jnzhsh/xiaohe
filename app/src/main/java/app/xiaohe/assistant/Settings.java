@@ -12,19 +12,29 @@ import org.json.*;
 public final class Settings {
   private final SharedPreferences prefs;
   private static final String ALIAS="xiaohe-api-keys-v1";
+  private static final Object KEY_LOCK=new Object();
   public Settings(Context c){prefs=c.getSharedPreferences("settings",0);}
   public String get(String k,String d){return prefs.getString(k,d);}
   public boolean flag(String k,boolean d){return prefs.getBoolean(k,d);}
   public boolean connected(){return !get("baseUrl","").isEmpty()&&!get("model","").isEmpty();}
   private SecretKey key() throws Exception {
-    KeyStore ks=KeyStore.getInstance("AndroidKeyStore");ks.load(null);
-    if(!ks.containsAlias(ALIAS)){KeyGenerator gen=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore");gen.init(new KeyGenParameterSpec.Builder(ALIAS,KeyProperties.PURPOSE_ENCRYPT|KeyProperties.PURPOSE_DECRYPT).setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build());gen.generateKey();}
-    return ((KeyStore.SecretKeyEntry)ks.getEntry(ALIAS,null)).getSecretKey();
+    synchronized(KEY_LOCK){KeyStore ks=KeyStore.getInstance("AndroidKeyStore");ks.load(null);
+      if(!ks.containsAlias(ALIAS)){KeyGenerator gen=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore");gen.init(new KeyGenParameterSpec.Builder(ALIAS,KeyProperties.PURPOSE_ENCRYPT|KeyProperties.PURPOSE_DECRYPT).setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build());gen.generateKey();}
+      return ((KeyStore.SecretKeyEntry)ks.getEntry(ALIAS,null)).getSecretKey();}
   }
   public String secret(String field) throws Exception {
     String saved=get(field,"");if(saved.isEmpty())return "";String[] parts=saved.split(":",2);Cipher c=Cipher.getInstance("AES/GCM/NoPadding");c.init(Cipher.DECRYPT_MODE,key(),new GCMParameterSpec(128,Base64.decode(parts[0],Base64.NO_WRAP)));return new String(c.doFinal(Base64.decode(parts[1],Base64.NO_WRAP)),"UTF-8");
   }
   private String encrypt(String text)throws Exception{Cipher c=Cipher.getInstance("AES/GCM/NoPadding");c.init(Cipher.ENCRYPT_MODE,key());return Base64.encodeToString(c.getIV(),Base64.NO_WRAP)+":"+Base64.encodeToString(c.doFinal(text.getBytes("UTF-8")),Base64.NO_WRAP);}
+  public void saveGithubToken(String token,boolean clear)throws Exception {
+    SharedPreferences.Editor editor=prefs.edit();
+    if(clear)editor.remove("githubToken");
+    else if(token!=null&&!token.trim().isEmpty()){
+      String value=token.trim();if(value.length()>4096||value.matches("(?s).*[\\s\\p{Cntrl}].*"))throw new Exception("请只填写 GitHub Token 本身，不带换行或空格。");
+      editor.putString("githubToken",encrypt(value));
+    }
+    if(!editor.commit())throw new Exception("连接设置没有存好，请检查手机剩余空间。");
+  }
   public JSONObject publicValues() throws Exception {
     JSONObject o=new JSONObject();for(String k:new String[]{"baseUrl","model","asrUrl","asrModel"})o.put(k,get(k,k.equals("asrModel")?"whisper-1":""));o.put("hasKey",!get("apiKey","").isEmpty());o.put("hasAsrKey",!get("asrKey","").isEmpty());o.put("vision",flag("vision",false));o.put("localOcr",flag("localOcr",true));o.put("connected",connected());return o;
   }

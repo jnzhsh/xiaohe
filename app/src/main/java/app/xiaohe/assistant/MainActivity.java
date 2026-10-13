@@ -21,6 +21,7 @@ import java.util.regex.*;
 
 public final class MainActivity extends Activity {
   private WebView web;private Store store;private final ExecutorService io=Executors.newSingleThreadExecutor();
+  private final ExecutorService feedbackIo=Executors.newSingleThreadExecutor();private Feedback feedback;
   private boolean ready=false,waitingVoice=false,notificationRequested=false;private JSONArray sharedFiles=new JSONArray();private String sharedText="";
   private OfflineSpeech speech;private boolean foreground;private String pickerRequest,exportRequest,importRequest;
   private static final int PICK=10,EXPORT=11,IMPORT=12,MIC=13,NOTIFY=14;
@@ -61,6 +62,10 @@ public final class MainActivity extends Activity {
   private void event(String name,Object value){runOnUiThread(()->{if(!ready||isFinishing()||isDestroyed())return;String json=value==null?"null":value.toString();web.evaluateJavascript("window.NativeBridge&&window.NativeBridge.event("+JSONObject.quote(name)+",JSON.parse("+JSONObject.quote(json)+"))",null);});}
   public final class Bridge {
     @JavascriptInterface public void invoke(String method,String raw,String request){
+      if(Feedback.accepts(method)){
+        feedbackIo.execute(()->{try{if(feedback==null)feedback=new Feedback(MainActivity.this);result(request,feedback.handle(method,new JSONObject(raw)),null);}
+          catch(JSONException e){result(request,null,"反馈内容没读完整，输入还在，可以再试。");}catch(Exception e){result(request,null,friendly(e));}});return;
+      }
       if(Arrays.asList("pickFiles","export","import","voice","openFile","openUrl","reminder","exactAlarmSettings","readClipboard","preparePaste").contains(method)){runOnUiThread(()->{try{uiCall(method,new JSONObject(raw),request);}catch(Exception e){result(request,null,friendly(e));}});return;}
       io.execute(()->{try{JSONObject args=new JSONObject(raw);Object response=call(method,args);result(request,response,null);}catch(Exception e){result(request,null,friendly(e));}});
     }
@@ -185,7 +190,7 @@ public final class MainActivity extends Activity {
   }
   private void openUrl(String url){try{Uri u=Uri.parse(url);if(!Arrays.asList("http","https").contains(u.getScheme()))throw new Exception("只打开网页链接");startActivity(new Intent(Intent.ACTION_VIEW,u));}catch(Exception e){Toast.makeText(this,"暂时无法打开这个链接",Toast.LENGTH_SHORT).show();}}
   private static JSONObject jsonText(String text){try{return new JSONObject().put("text",text);}catch(Exception e){return new JSONObject();}}
-  private String friendly(Exception e){String message=e.getMessage()==null?"这次没有完成，原始内容仍保存在手机里":e.getMessage();try{Settings settings=new Settings(this);for(String name:new String[]{"apiKey","asrKey"}){String secret=settings.secret(name);if(!secret.isEmpty())message=message.replace(secret,"[密钥已隐藏]");}}catch(Exception ignored){}return Store.shorten(message,260);}
+  private String friendly(Exception e){String message=e.getMessage()==null?"这次没有完成，原始内容仍保存在手机里":e.getMessage();try{Settings settings=new Settings(this);for(String name:new String[]{"apiKey","asrKey","githubToken"}){String secret=settings.secret(name);if(!secret.isEmpty())message=message.replace(secret,"[密钥已隐藏]");}}catch(Exception ignored){}message=message.replaceAll("(?i)(?:ghp_|github_pat_|gh[ousr]_)[A-Za-z0-9_]+","[密钥已隐藏]").replaceAll("(?i)(Authorization\\s*:\\s*Bearer\\s+|\\bBearer\\s+)[^\\s\\r\\n\"'<>]+","$1[密钥已隐藏]");return Store.shorten(message,260);}
   @Override public void onBackPressed(){if(!ready){super.onBackPressed();return;}web.evaluateJavascript("window.App?window.App.back():false",value->{if(!"true".equals(value))MainActivity.super.onBackPressed();});}
-  @Override public void onDestroy(){waitingVoice=false;if(speech!=null)speech.close();io.shutdown();if(web!=null){web.removeJavascriptInterface("XiaoheAndroid");web.destroy();}super.onDestroy();}
+  @Override public void onDestroy(){waitingVoice=false;if(speech!=null)speech.close();io.shutdown();feedbackIo.shutdown();if(web!=null){web.removeJavascriptInterface("XiaoheAndroid");web.destroy();}super.onDestroy();}
 }
