@@ -133,6 +133,55 @@ public final class MemoryLedger {
     for(JSONObject r:context.values())if(!found.containsKey(r.getString("id")))found.put(r.getString("id"),r);
     JSONArray out=new JSONArray();for(JSONObject r:found.values()){if(out.length()>=limit)break;if(r.optString("referenceState").equals("unresolved")||r.optBoolean("structuredReview"))r.put("queryCaution","对象或更正后的结构仍不确定，原话已保留");out.put(r);}return out;
   }
+  // Read-only recall helpers. The original search/write/identity/date paths above keep their rules.
+  Set<String> recallNamedEntities(String text)throws Exception {
+    LinkedHashMap<String,LinkedHashSet<String>> aliases=new LinkedHashMap<>(),qualified=new LinkedHashMap<>();String clean=normal(text);
+    try(Cursor c=store.getReadableDatabase().rawQuery("SELECT e.id,a.alias,e.qualifier FROM entities e JOIN entity_aliases a ON e.id=a.entity_id",null)){
+      while(c.moveToNext()){String alias=c.getString(1);if(alias.isEmpty()||alias.matches("我|我们|本人|自己|他|她|它|他们|她们|它们|那位|这位|那个|这个"))continue;
+        if(clean.contains(alias)){aliases.computeIfAbsent(alias,k->new LinkedHashSet<>()).add(c.getString(0));if(!c.getString(2).isEmpty()&&clean.contains(c.getString(2)+alias))qualified.computeIfAbsent(alias,k->new LinkedHashSet<>()).add(c.getString(0));}}
+    }LinkedHashSet<String> names=new LinkedHashSet<>();for(String alias:aliases.keySet())names.addAll(qualified.getOrDefault(alias,aliases.get(alias)));return names;
+  }
+  static boolean recallHistory(String question){return question.matches("(?s).*(上次|上一次|最近一次|之前|以前|过去|当时|那时|原来|曾经|更正|记错|说错).*" );}
+  static boolean recallLast(String question){return question.matches("(?s).*(上次|上一次|最近一次).*" );}
+  static boolean recallEligible(JSONObject r,String question,JSONObject source){
+    String truth=r.optString("truthState","current");if(r.optString("processing").equals("pending")||truth.equals("retracted")||!recallHistory(question)&&!Arrays.asList("current","disputed").contains(truth))return false;
+    if(!recallLast(question))return true;String kind=r.optString("kind","legacy");
+    if(Arrays.asList("note","legacy","fact").contains(kind))return true;
+    JSONObject time=r.optJSONObject("time");return kind.equals("event")&&r.optString("eventState").equals("occurred")&&(time==null||time.optLong("start")<=TimeAnchor.anchor(source));
+  }
+  boolean recallMatchesNamed(JSONObject r,Set<String> names)throws Exception {
+    if(names.isEmpty())return true;JSONArray linked=array(r,"entityIds");boolean hasLinked=!r.optString("subjectId").isEmpty()||linked.length()>0;
+    if(names.contains(r.optString("subjectId")))return true;for(int i=0;i<linked.length();i++)if(names.contains(linked.optString(i)))return true;
+    if(hasLinked)return false;
+    String raw=normal(MemorySchema.searchable(r));for(String id:names){JSONObject e=store.one("entities",id);if(e==null)continue;JSONArray aliases=array(e,"aliases");add(aliases,e.optString("name"));for(int i=0;i<aliases.length();i++){String alias=normal(aliases.optString(i));if(!alias.isEmpty()&&raw.contains(alias))return true;}}
+    return false;
+  }
+  String recallTopic(JSONObject r)throws Exception {
+    StringBuilder text=new StringBuilder(r.optString("title")).append(' ').append(r.optString("predicate"));JSONArray tags=array(r,"tags");
+    for(int i=0;i<Math.min(8,tags.length());i++){String tag=tags.optString(i);if(!tag.matches("生活记录|待整理|记录|其他"))text.append(' ').append(tag);}
+    String seed=text.toString();String label=r.optString("subjectLabel");if(!label.isEmpty())seed=seed.replace(label," ");LinkedHashSet<String> ids=new LinkedHashSet<>();ids.add(r.optString("subjectId"));JSONArray linked=array(r,"entityIds");for(int i=0;i<linked.length();i++)ids.add(linked.optString(i));
+    for(String id:ids){JSONObject e=store.one("entities",id);if(e==null)continue;JSONArray aliases=array(e,"aliases");add(aliases,e.optString("name"));for(int i=0;i<aliases.length();i++)if(!aliases.optString(i).isEmpty())seed=seed.replace(aliases.optString(i)," ");}
+    return Store.shorten(seed.trim(),256);
+  }
+  JSONArray recallSearch(String text,int limit,JSONObject source,String question,boolean namedScope)throws Exception {
+    limit=Math.min(60,Math.max(1,limit));boolean last=recallLast(question);Set<String> names=namedScope?recallNamedEntities(question):Collections.emptySet();
+    String where=recallHistory(question)?"m.truth_state<>'retracted'":"m.truth_state IN ('current','disputed')";
+    // A note/legacy can contain the answer even if it has never acquired a structured event date.
+    if(last)where+=" AND (m.kind IN ('note','legacy','fact') OR (m.kind='event' AND m.event_state='occurred' AND (m.event_start=0 OR m.event_start<="+TimeAnchor.anchor(source)+")))";
+    String clean=text.replaceAll("帮我|找一下|查一下|告诉我|之前|上一次|上次|现在|目前|是什么时候|什么时候|什么|怎么|在哪|哪里|有没有|记得|更正|记错了|说错了|那个|这个"," ");
+    StringBuilder match=new StringBuilder();for(String term:MemorySchema.terms(Store.shorten(clean,160)).split(" +")){if(term.length()<2)continue;if(match.length()>0)match.append(" OR ");match.append('"').append(term.replace("\"","\"\"")).append('"');if(match.length()>1600)break;}
+    LinkedHashMap<String,JSONObject> found=new LinkedHashMap<>();if(match.length()>0){List<String> params=new ArrayList<>();params.add(match.toString());String entityFilter="";
+      if(!names.isEmpty()){StringJoiner slots=new StringJoiner(",");for(String id:names){slots.add("?");params.add(id);}entityFilter=" AND (m.id IN (SELECT memory_id FROM memory_entities WHERE entity_id IN ("+slots+")) OR NOT EXISTS (SELECT 1 FROM memory_entities e WHERE e.memory_id=m.id))";}
+      JSONArray ranked=rankedSearch("SELECT m.id,matchinfo(memory_fts,'pcnx'),m.event_start,m.valid_from,m.created FROM memory_fts f JOIN memories m ON m.rowid=f.docid WHERE memory_fts MATCH ? AND "+where+entityFilter,params.toArray(new String[0]),last);
+      for(int i=0;i<ranked.length()&&found.size()<limit;i++){JSONObject r=ranked.getJSONObject(i);if(recallEligible(r,question,source)&&recallMatchesNamed(r,names))found.put(r.getString("id"),r);}
+    }
+    // This is only an explicit-name supplement; an omitted/plural subject never hard-filters by latest focus.
+    for(String id:names){if(found.size()>=limit)break;JSONArray supplement=query("SELECT m.data FROM memories m JOIN memory_entities e ON e.memory_id=m.id WHERE e.entity_id=? AND "+where+" ORDER BY m.event_start DESC,m.valid_from DESC,m.created DESC LIMIT 40",id);for(int i=0;i<supplement.length()&&found.size()<limit;i++){JSONObject r=supplement.getJSONObject(i);if(recallEligible(r,question,source))found.putIfAbsent(r.getString("id"),r);}}
+    JSONArray out=new JSONArray();for(JSONObject r:found.values()){if(r.optString("referenceState").equals("unresolved")||r.optBoolean("structuredReview"))r.put("queryCaution","对象或更正后的结构仍不确定，原话已保留");
+      if(last&&(!r.optString("kind").equals("event")||!r.optString("eventState").equals("occurred")||!TimeAnchor.resolved(r.optJSONObject("time"))))r.put("recallLastTimeUncertain",true).put("recallCaution","原话可作线索，但事件时间未经核对，不能认定是最近一次或某一天发生。");
+      if(r.optString("truthState").equals("historical"))r.put("recallCaution","这是过去有效的说法，不能当作当前事实。");out.put(r);}
+    return out;
+  }
   public JSONObject page(JSONObject args)throws Exception {
     int offset=Math.max(0,args.optInt("offset")),size=Math.min(100,Math.max(1,args.optInt("limit",40)));String status=args.optString("status","active"),tag=args.optString("tag"),q=args.optString("query");List<String> params=new ArrayList<>();String where="1=1";
     if(args.optBoolean("tasksOnly")){where+=" AND type IN ('task','event') AND status=?";params.add(status);}else if(status.equals("active"))where+=" AND status<>'archived'";else if(!status.equals("all")){where+=" AND status=?";params.add(status);}if(!tag.isEmpty()){where+=" AND id IN (SELECT memory_id FROM memory_tags WHERE tag=?)";params.add(tag);}if(args.optBoolean("attention")){where+=" AND id IN (SELECT memory_id FROM memory_attention)";}if(!q.trim().isEmpty()){String words=MemorySchema.terms(Store.shorten(q,160));StringBuilder m=new StringBuilder();for(String t:words.split(" +")){if(t.length()<2)continue;if(m.length()>0)m.append(" OR ");m.append('"').append(t.replace("\"","\"\"")).append('"');}if(m.length()>0){where+=" AND id IN (SELECT memory_id FROM memory_fts WHERE memory_fts MATCH ?)";params.add(m.toString());}else{where+=" AND data LIKE ? ESCAPE '\\'";params.add("%"+q.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%");}}
