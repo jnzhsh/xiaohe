@@ -21,6 +21,7 @@ import java.util.regex.*;
 
 public final class MainActivity extends Activity {
   private WebView web;private Store store;private final ExecutorService io=Executors.newSingleThreadExecutor();
+  private final ExecutorService feedbackIo=Executors.newSingleThreadExecutor();private Feedback feedback;
   private boolean ready=false,waitingVoice=false,notificationRequested=false;private JSONArray sharedFiles=new JSONArray();private String sharedText="";
   private OfflineSpeech speech;private boolean foreground;private String pickerRequest,exportRequest,importRequest;
   private static final int PICK=10,EXPORT=11,IMPORT=12,MIC=13,NOTIFY=14;
@@ -61,6 +62,10 @@ public final class MainActivity extends Activity {
   private void event(String name,Object value){runOnUiThread(()->{if(!ready||isFinishing()||isDestroyed())return;String json=value==null?"null":value.toString();web.evaluateJavascript("window.NativeBridge&&window.NativeBridge.event("+JSONObject.quote(name)+",JSON.parse("+JSONObject.quote(json)+"))",null);});}
   public final class Bridge {
     @JavascriptInterface public void invoke(String method,String raw,String request){
+      if(Feedback.accepts(method)){
+        feedbackIo.execute(()->{try{if(feedback==null)feedback=new Feedback(MainActivity.this);result(request,feedback.handle(method,new JSONObject(raw)),null);}
+          catch(JSONException e){result(request,null,"反馈内容没读完整，输入还在，可以再试。");}catch(Exception e){result(request,null,friendly(e));}});return;
+      }
       if(Arrays.asList("pickFiles","export","import","voice","openFile","openUrl","reminder","exactAlarmSettings","readClipboard","preparePaste").contains(method)){runOnUiThread(()->{try{uiCall(method,new JSONObject(raw),request);}catch(Exception e){result(request,null,friendly(e));}});return;}
       io.execute(()->{try{JSONObject args=new JSONObject(raw);Object response=call(method,args);result(request,response,null);}catch(Exception e){result(request,null,friendly(e));}});
     }
@@ -77,6 +82,7 @@ public final class MainActivity extends Activity {
       case "localSearch":return store.search(args.optString("query"),100);
       case "getMessage":return store.one("messages",args.getString("id"));
       case "getMemory":return store.one("memories",args.getString("id"));
+      case "memoryEditContext":return new ChatMemoryEdit(this).context(args.getString("id"));
       case "getConflicts":{JSONObject memory=store.one("memories",args.getString("memoryId"));JSONArray groups=memory==null?new JSONArray():store.rows("SELECT data FROM conflicts WHERE fact_key=? AND state='open' ORDER BY created DESC",memory.optString("factKey")),matching=new JSONArray();for(int i=0;i<groups.length();i++){JSONObject group=groups.getJSONObject(i);JSONArray ids=group.optJSONArray("memberIds");if(ids!=null)for(int j=0;j<ids.length();j++)if(ids.optString(j).equals(args.getString("memoryId"))){matching.put(group);break;}}return matching;}
       case "entityPage":{String q=MemorySchema.normal(args.optString("query"));int offset=Math.max(0,args.optInt("offset")),limit=Math.min(80,Math.max(1,args.optInt("limit",40)));String where="1=1";List<String> params=new ArrayList<>();if(!q.isEmpty()){String pattern="%"+q.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%";where="(name_norm LIKE ? ESCAPE '\\' OR qualifier LIKE ? ESCAPE '\\' OR id IN (SELECT entity_id FROM entity_aliases WHERE alias LIKE ? ESCAPE '\\'))";params.add(pattern);params.add(pattern);params.add(pattern);}int total;try(Cursor cursor=store.getReadableDatabase().rawQuery("SELECT COUNT(*) FROM entities WHERE "+where,params.toArray(new String[0]))){cursor.moveToFirst();total=cursor.getInt(0);}params.add(""+limit);params.add(""+offset);JSONArray rows=store.rows("SELECT data FROM entities WHERE "+where+" ORDER BY created DESC LIMIT ? OFFSET ?",params.toArray(new String[0]));return new JSONObject().put("rows",rows).put("total",total).put("hasMore",offset+rows.length()<total);}
       case "memoryPage":return new MemoryLedger(store).page(args);
@@ -102,6 +108,10 @@ public final class MainActivity extends Activity {
     if(m.optBoolean("processed"))return store.bootstrap();
     JSONArray files=m.optJSONArray("files");if(files!=null)for(int i=0;i<files.length();i++){JSONObject f=store.one("files",files.getString(i));if(f!=null&&f.optBoolean("recorded")&&!f.optBoolean("localVoice")&&!f.optString("text").isEmpty()){m.put("voiceText",f.getString("text")).put("recordedVoiceVerified",true);if(m.optString("content").isEmpty())m.put("content",f.getString("text"));}}
     Matcher matcher=Pattern.compile("https?://[^\\s<>\"，。；]+",Pattern.CASE_INSENSITIVE).matcher(m.optString("content"));if(matcher.find()&&!m.has("linkText")){event("progress",new JSONObject().put("text","我在看看链接里能读到的内容…"));try{m.put("linkText",MediaProcessor.fetchLink(matcher.group()));m.put("linkNote","已读取无需登录的网页文字，脚本生成的内容可能未包含");}catch(Exception e){m.put("linkNote","原链接已保留，网页未能读取："+friendly(e));}store.put("messages",m);}
+    if(m.optJSONObject("editContext")!=null){store.put("messages",m);
+      try{JSONObject response=new ChatMemoryEdit(this).process(m,new AiEngine(this),args.optJSONArray("frames"));if(response.optBoolean("editNeedsNotification"))requestNotificationPermission();return response;}
+      catch(Exception e){String reason=friendly(e);JSONObject current=store.one("messages",m.getString("id"));if(current==null)throw e;boolean applied=current.optJSONObject("editResult")!=null&&current.getJSONObject("editResult").optBoolean("changed");store.reply(applied?"这轮修改已经保存，回应还没补齐。原话和修改版本都留着，可以继续整理。":"这次还没改动原记录。修改的话已经留在聊天里，连接好或重新选好目标后可以再试。",current.getString("id"),reason);current.put("error",reason);store.put("messages",current);return store.bootstrap();}
+    }
     event("progress",new JSONObject().put("text",MemoryAnswer.isQuery(m)?"我在看看你记过的资料…":"我在把这些事整理好…"));
     try{JSONObject ai=new AiEngine(this).process(m,args.optJSONArray("frames"));if(ai.optString("intent").equals("query")){saveQueryReply(m,ai);return store.bootstrap();}String replyText=ai.getString("reply");JSONArray eligible=ai.optJSONArray("reminderEligibleIds"),schedules=new JSONArray();if(eligible!=null)for(int i=0;i<eligible.length();i++){JSONObject r=store.one("memories",eligible.getString(i));if(r==null)continue;JSONObject schedule=Scheduler.schedule(this,r);r.put("reminderSchedule",schedule).put("changeReason","手机记录提醒的实际排程结果");store.put("memories",r);schedules.put(schedule);if(schedule.optString("state").equals("scheduled"))requestNotificationPermission();}
       if(schedules.length()>0){boolean scheduled=false,permission=false,approximate=false;long at=0;for(int i=0;i<schedules.length();i++){JSONObject schedule=schedules.getJSONObject(i);if(schedule.optString("state").equals("scheduled")){scheduled=true;at=schedule.optLong("at");permission|=!schedule.optBoolean("notificationsAllowed");approximate|=!schedule.optBoolean("exact");}}if(scheduled){if(permission)replyText+="\n时间记好了，允许通知后我才能提醒你。";else{java.time.ZoneId zone=java.time.ZoneId.of(TimeAnchor.zone(m));String when=java.time.Instant.ofEpochMilli(at).atZone(zone).format(java.time.format.DateTimeFormatter.ofPattern("M月d日 HH:mm",Locale.SIMPLIFIED_CHINESE));replyText+=schedules.length()==1?"\n我会在 "+when+" 提醒你。":"\n这几条提醒的时间都安排好了。";if(approximate)replyText+=" 系统目前按大致时间提醒。";}}else replyText+="\n提醒要求我留着了，这次系统还没接受安排。";}
@@ -148,12 +158,15 @@ public final class MainActivity extends Activity {
   @Override public void onNewIntent(Intent i){super.onNewIntent(i);setIntent(i);receive(i);}
   private void deliverShared(){if(!ready||(sharedText.isEmpty()&&sharedFiles.length()==0))return;try{event("shared",new JSONObject().put("text",sharedText).put("files",sharedFiles));sharedText="";sharedFiles=new JSONArray();}catch(Exception ignored){}}
   private JSONObject stageMessage(JSONObject args,JSONArray files,String id)throws Exception {
-    if(!args.has("capturedAt")&&!args.has("capturedZone")&&!args.has("anchorFileId"))return store.message("user",args.optString("text"),files,id);
+    synchronized(store){JSONObject existing=store.one("messages",id);if(existing!=null)return existing;JSONObject editContext=null;if(args.has("editContext")&&!args.isNull("editContext")){if(args.optJSONObject("editContext")==null)throw new Exception("这次修改的目标没读完整，请重新选一下。");editContext=new ChatMemoryEdit(this).capture(args.getJSONObject("editContext"));}android.database.sqlite.SQLiteDatabase staged=editContext==null?null:store.getWritableDatabase();if(staged!=null)staged.beginTransaction();try{JSONObject message;
+    if(!args.has("capturedAt")&&!args.has("capturedZone")&&!args.has("anchorFileId"))message=store.message("user",args.optString("text"),files,id);
+    else {
     long at=args.getLong("capturedAt");String zone=args.getString("capturedZone"),fileId=args.getString("anchorFileId");
     JSONObject anchorFile=store.one("files",fileId);
     if(at<=0||anchorFile==null||!anchorFile.optBoolean("localVoice")||anchorFile.optLong("capturedAt")!=at||!anchorFile.optString("capturedZone").equals(zone))throw new Exception("这段语音的原始时间暂时没找到，可以先清空草稿再输入。");
     try{java.time.ZoneId.of(zone);java.time.Instant.ofEpochMilli(at);}catch(Exception e){throw new Exception("这段语音的时间信息不完整。");}
-    return store.message("user",args.optString("text"),files,id,at,zone);
+    message=store.message("user",args.optString("text"),files,id,at,zone);}
+    if(editContext!=null){message.put("editContext",editContext);store.put("messages",message);}if(staged!=null)staged.setTransactionSuccessful();return message;}finally{if(staged!=null)staged.endTransaction();}}
   }
   private void startVoice(){
     if(isFinishing()||isDestroyed())return;if(!foreground){event("voiceState",jsonState("stopped"));return;}
@@ -190,7 +203,7 @@ public final class MainActivity extends Activity {
   }
   private void openUrl(String url){try{Uri u=Uri.parse(url);if(!Arrays.asList("http","https").contains(u.getScheme()))throw new Exception("只打开网页链接");startActivity(new Intent(Intent.ACTION_VIEW,u));}catch(Exception e){Toast.makeText(this,"暂时无法打开这个链接",Toast.LENGTH_SHORT).show();}}
   private static JSONObject jsonText(String text){try{return new JSONObject().put("text",text);}catch(Exception e){return new JSONObject();}}
-  private String friendly(Exception e){String message=e.getMessage()==null?"这次没有完成，原始内容仍保存在手机里":e.getMessage();try{Settings settings=new Settings(this);for(String name:new String[]{"apiKey","asrKey"}){String secret=settings.secret(name);if(!secret.isEmpty())message=message.replace(secret,"[密钥已隐藏]");}}catch(Exception ignored){}return Store.shorten(message,260);}
+  private String friendly(Exception e){String message=e.getMessage()==null?"这次没有完成，原始内容仍保存在手机里":e.getMessage();try{Settings settings=new Settings(this);for(String name:new String[]{"apiKey","asrKey","githubToken"}){String secret=settings.secret(name);if(!secret.isEmpty())message=message.replace(secret,"[密钥已隐藏]");}}catch(Exception ignored){}message=message.replaceAll("(?i)(?:ghp_|github_pat_|gh[ousr]_)[A-Za-z0-9_]+","[密钥已隐藏]").replaceAll("(?i)(Authorization\\s*:\\s*Bearer\\s+|\\bBearer\\s+)[^\\s\\r\\n\"'<>]+","$1[密钥已隐藏]");return Store.shorten(message,260);}
   @Override public void onBackPressed(){if(!ready){super.onBackPressed();return;}web.evaluateJavascript("window.App?window.App.back():false",value->{if(!"true".equals(value))MainActivity.super.onBackPressed();});}
-  @Override public void onDestroy(){waitingVoice=false;if(speech!=null)speech.close();io.shutdown();if(web!=null){web.removeJavascriptInterface("XiaoheAndroid");web.destroy();}super.onDestroy();}
+  @Override public void onDestroy(){waitingVoice=false;if(speech!=null)speech.close();io.shutdown();feedbackIo.shutdown();if(web!=null){web.removeJavascriptInterface("XiaoheAndroid");web.destroy();}super.onDestroy();}
 }
