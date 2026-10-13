@@ -12,13 +12,22 @@ public final class MemoryAnswer {
   private static final Pattern COMMANDS=Pattern.compile("帮我记|替我记|记一下|记下来|记住|记录一下|记录下来|保存下来|帮我保存|请保存|请记录|提醒我|提醒一下|请提醒|帮我安排|替我安排|给我安排|改期|改到|改成|修改|更正|推迟到|延期到|提前到|(?:把|将).{0,60}(?:归档|恢复|取消|完成|标记|标为)|(?:^|[。；;！!\\n])\\s*(?:请|帮我|先|现在)?\\s*(?:记录|保存|新增|添加|归档|恢复|取消)(?!过|了|多|几|里|中|的|[吗么])|(?:已经)?(?:完成|做完|搞定|办完|看完|学完|读完)了(?![吗么没])");
   private static final Pattern NUMBER=Pattern.compile("(?<![0-9.．])[0-9]+(?:[.．][0-9]+)?(?![0-9.．])");
   private static final Pattern CLAIMS_WRITE=Pattern.compile("记下了|记好了|记着了|已经记录|已记录|已保存|已经保存|已归档|已经归档|已恢复|已经恢复|已经更改|已经修改|已更新|(?:我|小禾|帮你|替你|为你).{0,10}(?:完成了|取消了|归档了|恢复了|设置了|安排好了|修改好了|改好了)|(?:准时|届时|到时).{0,5}(?:提醒|通知)");
+  private static final Pattern RECORD_REQUEST=Pattern.compile("帮我记|替我记|记一下|记下来|记住|记录一下|记录下来|保存下来|帮我保存|请保存|请记录|(?:^|[。；;！!\\n])\\s*(?:请|帮我|先|现在)?\\s*(?:记录|保存|新增|添加)(?!过|了|多|几|里|中|的|[吗么])");
+  private static final Pattern ACTION_REQUEST=Pattern.compile("(?:^|[。；;！!\\n])\\s*(?:(?:(?:请|帮我|替我|给我|麻烦你|劳烦你)\\s*){1,2}(?:(?:提醒|改期|改到|改成|修改|归档|恢复|取消|标记|完成)|(?:把|将)[^。；;！？?\\n]{0,60}(?:归档|恢复|取消|完成|标记|改期|改到|改成|修改))|(?:先|现在)?\\s*(?:把|将)[^。；;！？?\\n]{0,60}(?:归档|恢复|取消|完成|标记|改期|改到|改成|修改)|提醒我|提醒一下|(?:归档|恢复|取消|改期|修改|标记)(?:这|那|该|所选|选中|当前|一下|到))");
+  private static final Pattern ACTION_INQUIRY=Pattern.compile("(?:谁|哪位|什么人|何时|什么时候|几点)[^。；;！？?\\n]{0,24}(?:提醒|修改|改期|归档|恢复|取消|标记|完成)|(?:怎么|如何|怎样|为什么|什么叫)[^。；;！？?\\n]{0,32}(?:提醒|改期|修改|归档|恢复|取消|标记|完成)|(?:提醒|改期|修改|归档|恢复|取消|标记|完成)[^。；;！？?\\n]{0,20}(?:怎么|如何|怎样|为什么|是什么意思|会不会|会|是否|能否)");
+  private static final Pattern DATED_REMINDER=Pattern.compile("^(?:今天|明天|后天|大后天|今晚|(?:上|下|本|这)?周[一二三四五六日天])[^。；;！？?\\n]{0,24}提醒我");
 
   public MemoryAnswer(Store store){if(store==null)throw new IllegalArgumentException("store");this.store=store;}
 
   /** Only the current primary utterance can request a query; quoted material is data. */
   public static boolean isQuery(JSONObject source){
     if(source==null||!source.optString("role","user").equals("user")||source.optJSONObject("editContext")!=null)return false;
-    String text=primary(source.optString("content")).trim();if(text.isEmpty()||COMMANDS.matcher(text).find())return false;
+    String text=primary(source.optString("content")).trim();if(text.isEmpty())return false;
+    // An action mentioned in a rule/history question is not an execution request.
+    // Direct requests remain writes even when phrased politely with a question mark.
+    if(RECORD_REQUEST.matcher(text).find()||ACTION_REQUEST.matcher(text).find())return false;
+    Matcher dated=DATED_REMINDER.matcher(text);if(dated.find()&&!dated.group().matches("(?s).*(谁|哪位|何时|什么时候|几点|是否).*"))return false;
+    if(ACTION_INQUIRY.matcher(text).find()&&(QUESTIONS.matcher(text).find()||text.matches("(?s).*(谁|什么人).*")))return true;if(COMMANDS.matcher(text).find())return false;
     return QUESTIONS.matcher(text).find();
   }
   private static String primary(String value){return HIDDEN.matcher(value==null?"":value).replaceAll(" ");}
@@ -83,6 +92,7 @@ public final class MemoryAnswer {
   private static final class Rows {final LinkedHashMap<String,JSONObject> values=new LinkedHashMap<>();int changed;}
   private Rows verified(JSONArray candidates,JSONObject coverage)throws Exception {
     Rows rows=new Rows();JSONArray sent=coverage==null?null:coverage.optJSONArray("sentIds");Set<String> allowed=null;if(sent!=null){allowed=new HashSet<>();for(int i=0;i<sent.length();i++)if(sent.opt(i) instanceof String)allowed.add(sent.getString(i));}
+    JSONArray scoped=coverage==null?null:coverage.optJSONArray("answerIds");if(scoped!=null){Set<String> ids=new HashSet<>();for(int i=0;i<scoped.length();i++)if(scoped.opt(i) instanceof String)ids.add(scoped.optString(i));if(allowed==null)allowed=ids;else allowed.retainAll(ids);}
     if(candidates==null)return rows;for(int i=0;i<candidates.length();i++){JSONObject candidate=candidates.optJSONObject(i);if(candidate==null)continue;String id=candidate.optString("id");if(id.isEmpty()||rows.values.containsKey(id)||allowed!=null&&!allowed.contains(id))continue;JSONObject current=store.one("memories",id);if(!eligible(current))continue;
       boolean same=true;Iterator<String> keys=current.keys();while(keys.hasNext()){String key=keys.next();if(!candidate.has(key)||!equal(current.opt(key),candidate.opt(key))){same=false;break;}}if(!same){rows.changed++;continue;}JSONObject copy=new JSONObject(current.toString());if(candidate.optJSONObject("recallVisible")!=null)copy.put("recallVisible",new JSONObject(candidate.getJSONObject("recallVisible").toString()));rows.values.put(id,copy);
     }return rows;
