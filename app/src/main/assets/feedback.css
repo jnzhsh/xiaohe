@@ -1,0 +1,34 @@
+/* Feedback owns these selectors; common chat, voice and memory styles stay separate. */
+/* Older WebViews keep the initial showModal position when the loading view grows.
+   Explicit edges and a bounded flex body keep later editor/preview controls reachable. */
+#feedback-dialog[open]{top:11px;bottom:11px;left:0;right:0;margin:0 auto;height:calc(var(--vh) - 22px);max-height:calc(var(--vh) - 22px);display:flex;flex-direction:column}
+#feedback-dialog .sheet-header{flex-shrink:0}
+#feedback-dialog .sheet-body{flex:1;min-height:0;max-height:none;overflow-y:auto}
+.feedback-reply-tools{margin-top:8px}
+.feedback-reply-tools .soft-button{font-size:.75rem;color:var(--muted);padding:6px 0}
+#feedback-dialog label{display:block;margin-top:13px;font-size:.875rem}
+#feedback-dialog label input:not([type=checkbox]){margin-top:5px}
+#feedback-description{border:1px solid var(--line);border-radius:13px;padding:11px 12px;margin-top:5px;min-height:110px;max-height:230px}
+#feedback-dialog .feedback-check{display:flex;align-items:center;gap:12px;justify-content:space-between}
+#feedback-dialog .feedback-check span{min-width:0;flex:1}
+#feedback-dialog .feedback-check small{display:block;font-size:.75rem;font-weight:400;color:var(--muted);line-height:1.6;margin-top:2px}
+#feedback-dialog .feedback-check input{flex-shrink:0}
+#feedback-status{min-height:24px;margin:10px 0;color:var(--muted);font-size:.8125rem;white-space:pre-wrap;overflow-wrap:anywhere}
+#feedback-dialog .feedback-public-note{background:var(--tint);border-radius:13px;padding:10px 12px;font-size:.8125rem;line-height:1.65;margin:0 0 10px}
+#feedback-dialog .feedback-public-note strong{font-weight:500}
+#feedback-preview-title{font-size:1rem;overflow-wrap:anywhere;margin:8px 0}
+#feedback-preview-body,#feedback-uncertain-body{margin:10px 0;padding:12px;border:1px solid var(--line);border-radius:13px;background:var(--surface);font:inherit;font-size:.8125rem;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;max-height:330px;overflow-y:auto}
+#feedback-redaction-note{color:var(--muted);font-size:.8125rem}
+#feedback-result,#feedback-uncertain{border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--surface)}
+#feedback-result h3,#feedback-uncertain h3{margin-bottom:6px}
+#feedback-uncertain details summary{min-height:44px;color:var(--muted);font-size:.8125rem;cursor:pointer}
+#feedback-dialog .feedback-footer{margin-top:18px;padding-top:12px;border-top:1px solid var(--line)}
+#feedback-draft-help{font-size:.75rem;color:var(--muted);line-height:1.6;margin:8px 0 0}
+#feedback-settings .feedback-credentials{margin-top:12px}
+#feedback-settings .feedback-credentials summary{font-size:.875rem;cursor:pointer}
+.viewport-short #feedback-description{min-height:70px;max-height:120px}
+.viewport-short #feedback-preview-body,.viewport-short #feedback-uncertain-body{max-height:160px}
+.viewport-short #feedback-dialog[open]{top:4px;bottom:4px;height:calc(var(--vh) - 8px);max-height:calc(var(--vh) - 8px)}
+
+#feedback-replace-confirm{background:var(--tint);border-radius:13px;padding:10px 12px;font-size:.8125rem}
+#feedback-replace-confirm p{margin:0}
